@@ -1,66 +1,27 @@
 version: "3.8"
-
-# ─────────────────────────────────────────────────────────
-#  STACK: Fleet Alert  (Traccar → WhatsApp via Evolution API)
-# ─────────────────────────────────────────────────────────
 services:
-
   fleet-alert:
     build:
       context: .
       dockerfile: Dockerfile.fleet
     container_name: fleet-alert
     restart: unless-stopped
+    network_mode: host
     environment:
-      # ── Traccar ────────────────────────────────────────
       TRACCAR_URL:      "https://rastreamentopopular.com"
       TRACCAR_EMAIL:    "aquitelecom"
       TRACCAR_PASSWORD: "267426"
-
-      # ── Evolution API ──────────────────────────────────
-      EVOLUTION_URL:      "http://host.docker.internal:8080"
+      EVOLUTION_URL:      "http://10.169.0.20:8080"
       EVOLUTION_API_KEY:  "429683C4C977415CAAFCCE10F7D57E11"
       EVOLUTION_INSTANCE: "interatell01"
-
-      # ── Internos ───────────────────────────────────────
       STATE_FILE: "/app/data/estado.json"
       DB_PATH:    "/app/data/logs.db"
       WEB_PORT:   "5000"
-
-      # ── Login do painel ────────────────────────────────
       WEB_SECRET_KEY: "fleet-alert-secret-2026"
       WEB_USER:       "admin"
       WEB_PASSWORD:   "fleet2026"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    ports:
-      - "5000:5000"   # painel: http://localhost:5000
     volumes:
       - fleet_data:/app/data
-    networks:
-      - fleet-net
-
-networks:
-  fleet-net:
-    driver: bridge
 
 volumes:
   fleet_data:
-
-# ─────────────────────────────────────────────────────────
-#  Stack Zabbix original (comentada — desativada)
-#  Descomente se precisar manter monitoramento Zabbix.
-# ─────────────────────────────────────────────────────────
-#
-#  postgres:
-#    image: postgres:15-alpine
-#    ...
-#
-#  zabbix-server:
-#    ...
-#
-#  zabbix-web:
-#    ...
-#
-#  traccar-collector:
-#    ...
