@@ -26,6 +26,11 @@ services:
       STATE_FILE: "/app/data/estado.json"
       DB_PATH:    "/app/data/logs.db"
       WEB_PORT:   "5000"
+
+      # ── Login do painel ────────────────────────────────
+      WEB_SECRET_KEY: "fleet-alert-secret-2026"
+      WEB_USER:       "admin"
+      WEB_PASSWORD:   "fleet2026"
     ports:
       - "5000:5000"   # painel: http://localhost:5000
     volumes:
