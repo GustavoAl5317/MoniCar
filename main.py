@@ -12,7 +12,7 @@ except ImportError:
 from fleet_alert.db import inicializar
 from fleet_alert.collector import iniciar_coletor
 from fleet_alert.web.app import criar_app
-from fleet_alert import config
+from fleet_alert import config, config_manager
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,6 +22,7 @@ logging.basicConfig(
 
 if __name__ == "__main__":
     inicializar()
+    config_manager.carregar()
 
     coletor = threading.Thread(target=iniciar_coletor, daemon=True, name="coletor")
     coletor.start()

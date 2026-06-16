@@ -115,6 +115,20 @@
     .tipo-EM_MOVIMENTO  { color: #86efac; font-weight: 600; }
     .tipo-DESLIGADO     { color: #fca5a5; font-weight: 600; }
     .tipo-ENVIO         { color: #64748b; }
+    .tipo-POSICAO       { color: #334155; }
+
+    .config-section { margin-top: 2rem; }
+    .config-section h2 { font-size: .95rem; font-weight: 600; margin-bottom: .75rem; }
+    .config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: .85rem; }
+    .config-card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 1rem 1.1rem; }
+    .config-label { font-size: .75rem; color: #64748b; margin-bottom: .3rem; }
+    .config-nome { font-size: .9rem; font-weight: 600; color: #f1f5f9; margin-bottom: .6rem; }
+    .config-input { width: 100%; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #e2e8f0; font-size: .8rem; padding: .4rem .6rem; margin-bottom: .5rem; }
+    .config-input:focus { outline: none; border-color: #475569; }
+    .btn-salvar { width: 100%; padding: .4rem; background: #1d4ed8; border: none; border-radius: 8px; color: #fff; font-size: .78rem; cursor: pointer; }
+    .btn-salvar:hover { background: #2563eb; }
+    .msg-ok  { font-size: .72rem; color: #86efac; margin-top: .3rem; display: none; }
+    .msg-err { font-size: .72rem; color: #fca5a5; margin-top: .3rem; display: none; }
   </style>
 </head>
 <body>
@@ -142,6 +156,11 @@
       </thead>
       <tbody id="logs-body"></tbody>
     </table>
+  </div>
+
+  <div class="config-section">
+    <h2>Configuração de grupos</h2>
+    <div class="config-grid" id="config-grid"></div>
   </div>
 </div>
 
@@ -196,6 +215,34 @@
     }).join('');
   }
 
+  function renderConfig(lista) {
+    document.getElementById('config-grid').innerHTML = lista.map(v => `
+      <div class="config-card">
+        <div class="config-nome">${v.nome}</div>
+        <div class="config-label">ID do grupo WhatsApp</div>
+        <input class="config-input" id="grupo-${v.nome}" value="${v.grupo_id || ''}" placeholder="120363...@g.us" />
+        <button class="btn-salvar" onclick="salvarConfig('${v.nome}')">Salvar grupo</button>
+        <div class="msg-ok"  id="ok-${v.nome}">✓ Salvo com sucesso</div>
+        <div class="msg-err" id="err-${v.nome}">✗ Erro ao salvar</div>
+      </div>`).join('');
+  }
+
+  async function salvarConfig(nome) {
+    const grupo_id = document.getElementById(`grupo-${nome}`).value.trim();
+    const okEl  = document.getElementById(`ok-${nome}`);
+    const errEl = document.getElementById(`err-${nome}`);
+    okEl.style.display = errEl.style.display = 'none';
+    try {
+      const r = await fetch(`/api/config/veiculo/${nome}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ grupo_id }),
+      });
+      if (r.ok) { okEl.style.display = 'block'; setTimeout(() => okEl.style.display = 'none', 3000); }
+      else       { errEl.style.display = 'block'; }
+    } catch { errEl.style.display = 'block'; }
+  }
+
   async function toggle(nome) {
     await fetch(`/api/toggle/${nome}`, { method: 'POST' });
     await atualizar();
@@ -209,6 +256,7 @@
       ]);
       renderCards(veiculos);
       renderLogs(logs);
+      renderConfig(veiculos);
       document.getElementById('atualizado').textContent =
         'Atualizado: ' + new Date().toLocaleTimeString('pt-BR');
     } catch (e) {

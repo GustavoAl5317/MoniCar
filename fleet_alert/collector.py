@@ -6,7 +6,7 @@ import websocket
 from fleet_alert import config, rules
 from fleet_alert.whatsapp import enviar_alerta
 from fleet_alert.audio import gerar_audio_base64
-from fleet_alert.db import registrar
+from fleet_alert.db import registrar, registrar_posicao
 
 log = logging.getLogger(__name__)
 
@@ -68,6 +68,13 @@ def _processar_posicao(pos: dict):
         "battery":      attrs.get("battery"),
         "odometer":     round(attrs.get("odometer", 0) / 1000, 2) if attrs.get("odometer") else None,
     }
+
+    # Registra todos os dados recebidos
+    registrar_posicao(
+        nome,
+        dados["ignition"], dados["motion"], dados["speed"],
+        dados["address"], dados.get("batteryLevel"), dados.get("odometer"),
+    )
 
     resultado = rules.processar(nome.upper(), dados)
     if not resultado:
