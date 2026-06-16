@@ -71,8 +71,12 @@ def enviar_alerta(nome: str, texto: str, audio_base64: str | None = None) -> boo
         log.info("Veículo '%s' desativado — alerta ignorado", nome)
         return False
 
-    grupo = cfg["grupo_id"]
-    ok    = enviar_texto(grupo, texto)
+    grupo = cfg.get("grupo_id")
+    if not grupo:
+        log.info("Veículo '%s' sem grupo WhatsApp — alerta só no painel", nome)
+        return True   # não é falha, só não envia
+
+    ok = enviar_texto(grupo, texto)
 
     if audio_base64:
         ok_audio = enviar_audio(grupo, audio_base64)

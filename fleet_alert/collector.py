@@ -13,6 +13,15 @@ log = logging.getLogger(__name__)
 _session  = requests.Session()
 _nomes: dict = {}   # { deviceId: nome_traccar }
 
+# Mapeamento nome_traccar → nome_exibição (chave de config.VEICULOS)
+def _build_traccar_map() -> dict:
+    return {
+        cfg.get("traccar_nome", nome): nome
+        for nome, cfg in config.VEICULOS.items()
+    }
+
+_traccar_para_display: dict = {}
+
 
 # ── Auth ─────────────────────────────────────────────────────────
 
@@ -35,11 +44,12 @@ def _login() -> bool:
 
 
 def _carregar_dispositivos():
-    global _nomes
+    global _nomes, _traccar_para_display
     try:
         r = _session.get(f"{config.TRACCAR_URL}/api/devices", timeout=15)
         _nomes = {d["id"]: d.get("name", f"device_{d['id']}") for d in r.json()}
-        log.info("📡 %d dispositivo(s) carregado(s)", len(_nomes))
+        _traccar_para_display = _build_traccar_map()
+        log.info("📡 %d dispositivo(s) | %d mapeado(s)", len(_nomes), len(_traccar_para_display))
     except Exception as e:
         log.error("Erro ao carregar dispositivos: %s", e)
 
@@ -47,13 +57,14 @@ def _carregar_dispositivos():
 # ── Processamento ─────────────────────────────────────────────────
 
 def _processar_posicao(pos: dict):
-    did  = pos.get("deviceId")
-    nome = _nomes.get(did)
-    if not nome:
+    did         = pos.get("deviceId")
+    nome_traccar = _nomes.get(did)
+    if not nome_traccar:
         return
 
-    # Filtra só veículos mapeados em config
-    if nome.upper() not in config.VEICULOS:
+    # Resolve nome de exibição via mapeamento traccar_nome → display
+    nome = _traccar_para_display.get(nome_traccar)
+    if not nome:
         return
 
     attrs = pos.get("attributes", {})
@@ -124,6 +135,9 @@ def _on_open(ws):
 # ── Loop principal ────────────────────────────────────────────────
 
 def iniciar_coletor():
+    global _traccar_para_display
+    _traccar_para_display = _build_traccar_map()
+
     if not _login():
         log.critical("Login falhou. Coletor encerrado.")
         return
