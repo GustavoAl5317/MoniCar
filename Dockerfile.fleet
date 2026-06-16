@@ -1,0 +1,16 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# ffmpeg para converter MP3 → OGG Opus (áudio PTT do WhatsApp)
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.fleet.txt .
+RUN pip install --no-cache-dir -r requirements.fleet.txt
+
+COPY fleet_alert/ ./fleet_alert/
+COPY main.py .
+
+RUN mkdir -p /app/data
+
+CMD ["python", "main.py"]
