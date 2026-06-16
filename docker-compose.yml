@@ -18,7 +18,7 @@ services:
       TRACCAR_PASSWORD: "267426"
 
       # ── Evolution API ──────────────────────────────────
-      EVOLUTION_URL:      "http://10.169.0.20:8080"
+      EVOLUTION_URL:      "http://host.docker.internal:8080"
       EVOLUTION_API_KEY:  "429683C4C977415CAAFCCE10F7D57E11"
       EVOLUTION_INSTANCE: "interatell01"
 
@@ -31,6 +31,8 @@ services:
       WEB_SECRET_KEY: "fleet-alert-secret-2026"
       WEB_USER:       "admin"
       WEB_PASSWORD:   "fleet2026"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "5000:5000"   # painel: http://localhost:5000
     volumes:
