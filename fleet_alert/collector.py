@@ -3,7 +3,7 @@ import time
 import logging
 import requests
 import websocket
-from fleet_alert.timeutil import hora_evento
+from fleet_alert.timeutil import hora_alerta
 from fleet_alert import config, state
 from fleet_alert import rules, geofence
 from fleet_alert.whatsapp import enviar_alerta, verificar_conexao
@@ -109,7 +109,7 @@ def _processar_posicao(pos: dict):
         est_atual = state.get(nome.upper())
         chegou    = geofence.verificar(nome.upper(), lat, lon, est_atual)
         if chegou:
-            hora      = hora_evento(pos.get("deviceTime") or pos.get("fixTime"))
+            hora      = hora_alerta()
             loja_nome = chegou["loja_nome"]
             endereco  = dados.get("address") or "N/D"
             texto_loja = (
@@ -117,14 +117,16 @@ def _processar_posicao(pos: dict):
                 f"Horário: {hora}.\n"
                 f"Localização: {endereco}."
             )
-            audio_loja = (
-                f"Alerta da frota. {nome} chegou na loja {loja_nome}. "
-                f"Horário: {hora}. Localização: {endereco}."
-            )
             registrar(nome, geofence.CHEGOU_LOJA, texto_loja[:200])
-            audio_b64_loja = gerar_audio_base64(audio_loja)
-            ok_loja = enviar_alerta(nome.upper(), texto_loja, audio_b64_loja)
-            registrar(nome, "ENVIO", "ok" if ok_loja else "falha")
+            # Geofence WhatsApp: somente carros
+            if cfg_veiculo.get("tipo") == "veiculo":
+                audio_loja = (
+                    f"Alerta da frota. {nome} chegou na loja {loja_nome}. "
+                    f"Horário: {hora}. Localização: {endereco}."
+                )
+                audio_b64_loja = gerar_audio_base64(audio_loja)
+                ok_loja = enviar_alerta(nome.upper(), texto_loja, audio_b64_loja)
+                registrar(nome, "ENVIO", "ok" if ok_loja else "falha")
         # Sempre atualiza estado de presença nas lojas e salva coordenadas
         state.atualizar(nome.upper(), {
             "latitude":  lat,

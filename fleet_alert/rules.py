@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime
 from fleet_alert import state, config
-from fleet_alert.timeutil import agora, agora_iso, hora_evento, parse_traccar, TZ_BR
+from fleet_alert.timeutil import agora, agora_iso, agora_data_hora, TZ_BR
 
 log = logging.getLogger(__name__)
 
@@ -63,12 +63,7 @@ def processar(nome: str, dados: dict) -> dict | None:
     endereco   = dados.get("address")  or "Endereço não disponível"
     bateria    = dados.get("batteryLevel") or dados.get("battery")
     odometro   = dados.get("odometer")
-    hora_evt   = hora_evento(dados.get("event_time"))
-    hora_evt_iso = (
-        parse_traccar(dados.get("event_time")).isoformat()
-        if parse_traccar(dados.get("event_time"))
-        else agora_iso()
-    )
+    hora_agora = agora_data_hora()
 
     km_str  = _fmt_km(odometro)
     bat_str = _fmt_bat(bateria)
@@ -77,7 +72,7 @@ def processar(nome: str, dados: dict) -> dict | None:
 
     # ── Veículo desligou ─────────────────────────────────────────
     if ig_ant == 1 and ig_atual == 0:
-        hora_desligou = hora_evt
+        hora_desligou = hora_agora
         tempo_str     = _tempo_ligado(est.get("hora_ligou_iso"))
 
         state.atualizar(nome, {
@@ -108,18 +103,18 @@ def processar(nome: str, dados: dict) -> dict | None:
 
     # ── Veículo ligou (estava desligado ou sem dados) ─────────────
     elif ig_ant != 1 and ig_atual == 1:
-        hora_ligou = hora_evt
+        hora_ligou = hora_agora
         state.atualizar(nome, {
             "ignition":       1,
             "hora_ligou":     hora_ligou,
-            "hora_ligou_iso": hora_evt_iso,
+            "hora_ligou_iso": agora_iso(),
             "ultimo_alerta":  None,
         })
 
         if motion == 1 or speed > config.SPEED_MOVING_KMPH:
-            resultado = _alerta_movimento(nome, hora_ligou, speed, endereco, km_str, bat_str)
+            resultado = _alerta_movimento(nome, hora_ligou, speed, endereco, km_str, bat_str, hora_agora)
         else:
-            resultado = _alerta_ligado_parado(nome, hora_ligou, endereco, km_str, bat_str)
+            resultado = _alerta_ligado_parado(nome, hora_ligou, endereco, km_str, bat_str, hora_agora)
 
     # ── Estava parado, começou a andar ───────────────────────────
     elif (ig_atual == 1
@@ -127,8 +122,8 @@ def processar(nome: str, dados: dict) -> dict | None:
           and (motion == 1 or speed > config.SPEED_MOVING_KMPH)):
         seg = _segundos_desde_ultimo_alerta(est)
         if seg >= _COOLDOWN_MOVIMENTO:
-            hora_ligou = est.get("hora_ligou", hora_evt)
-            resultado  = _alerta_movimento(nome, hora_ligou, speed, endereco, km_str, bat_str)
+            hora_ligou = est.get("hora_ligou", hora_agora)
+            resultado  = _alerta_movimento(nome, hora_ligou, speed, endereco, km_str, bat_str, hora_agora)
         else:
             log.debug("[%s] EM_MOVIMENTO suprimido — cooldown (%ds restantes)", nome, int(_COOLDOWN_MOVIMENTO - seg))
 
@@ -139,8 +134,8 @@ def processar(nome: str, dados: dict) -> dict | None:
           and speed <= config.SPEED_STOPPED_KMPH):
         seg = _segundos_desde_ultimo_alerta(est)
         if seg >= _COOLDOWN_MOVIMENTO:
-            hora_ligou = est.get("hora_ligou", hora_evt)
-            resultado  = _alerta_ligado_parado(nome, hora_ligou, endereco, km_str, bat_str)
+            hora_ligou = est.get("hora_ligou", hora_agora)
+            resultado  = _alerta_ligado_parado(nome, hora_ligou, endereco, km_str, bat_str, hora_agora)
         else:
             log.debug("[%s] LIGADO_PARADO suprimido — cooldown (%ds restantes)", nome, int(_COOLDOWN_MOVIMENTO - seg))
 
@@ -164,11 +159,12 @@ def processar(nome: str, dados: dict) -> dict | None:
     return resultado
 
 
-def _alerta_ligado_parado(nome, hora_ligou, endereco, km_str, bat_str) -> dict:
+def _alerta_ligado_parado(nome, hora_ligou, endereco, km_str, bat_str, hora_notif) -> dict:
     return {
         "tipo":  LIGADO_PARADO,
         "texto": (
             f"🟡 Veículo *{nome}* está ligado e parado.\n\n"
+            f"Horário: {hora_notif}.\n"
             f"Ligado às: {hora_ligou}.\n"
             f"Endereço atual: {endereco}.\n"
             f"KM atual: {km_str}.\n"
@@ -176,6 +172,7 @@ def _alerta_ligado_parado(nome, hora_ligou, endereco, km_str, bat_str) -> dict:
         ),
         "audio": (
             f"Alerta da frota. O veículo {nome} está ligado, porém parado. "
+            f"Horário: {hora_notif}. "
             f"Ligado às {hora_ligou}. "
             f"Localização: {endereco}. "
             f"Bateria em {bat_str}."
@@ -201,7 +198,7 @@ def processar_celular(nome: str, dados: dict) -> dict | None:
     if em_movimento and alerta_ant != EM_MOVIMENTO:
         seg = _segundos_desde_ultimo_alerta(est)
         if seg >= _COOLDOWN_MOVIMENTO:
-            hora = hora_evento(dados.get("event_time"))
+            hora = agora_data_hora()
             resultado = {
                 "tipo":  EM_MOVIMENTO,
                 "texto": (
@@ -220,7 +217,7 @@ def processar_celular(nome: str, dados: dict) -> dict | None:
     elif parado and alerta_ant == EM_MOVIMENTO:
         seg = _segundos_desde_ultimo_alerta(est)
         if seg >= _COOLDOWN_MOVIMENTO:
-            hora = hora_evento(dados.get("event_time"))
+            hora = agora_data_hora()
             resultado = {
                 "tipo":  LIGADO_PARADO,
                 "texto": (
@@ -252,19 +249,21 @@ def processar_celular(nome: str, dados: dict) -> dict | None:
     return resultado
 
 
-def _alerta_movimento(nome, hora_ligou, speed, endereco, km_str, bat_str) -> dict:
+def _alerta_movimento(nome, hora_ligou, speed, endereco, km_str, bat_str, hora_notif) -> dict:
     speed_str = f"{speed:.0f} km/h" if speed else "N/D"
     return {
         "tipo":  EM_MOVIMENTO,
         "texto": (
             f"🟢 Veículo *{nome}* iniciou deslocamento.\n\n"
+            f"Horário: {hora_notif}.\n"
             f"Ligado às: {hora_ligou}.\n"
             f"Endereço: {endereco}.\n"
             f"Bateria: {bat_str}.\n"
             f"Velocidade: {speed_str}."
         ),
         "audio": (
-            f"Alerta da frota. O veículo {nome} iniciou deslocamento às {hora_ligou}. "
+            f"Alerta da frota. O veículo {nome} iniciou deslocamento. "
+            f"Horário: {hora_notif}. "
             f"Localização: {endereco}. "
             f"Bateria em {bat_str}. "
             f"Velocidade: {speed_str}."

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 TZ_BR = ZoneInfo("America/Sao_Paulo")
@@ -22,16 +22,18 @@ def agora_iso() -> str:
 
 
 def parse_traccar(ts: str | None) -> datetime | None:
-    """Converte timestamp UTC do Traccar para datetime em Brasilia."""
+    """Converte timestamp do Traccar (UTC) para datetime em Brasilia."""
     if not ts:
         return None
     try:
-        return datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(TZ_BR)
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(TZ_BR)
     except Exception:
         return None
 
 
-def hora_evento(ts: str | None) -> str:
-    """Horario do evento GPS em Brasilia (dd/mm/YYYY HH:MM)."""
-    dt = parse_traccar(ts)
-    return dt.strftime(FMT_DATA_HORA) if dt else agora_data_hora()
+def hora_alerta() -> str:
+    """Horario exibido nos alertas WhatsApp — sempre Brasilia, momento do envio."""
+    return agora_data_hora()

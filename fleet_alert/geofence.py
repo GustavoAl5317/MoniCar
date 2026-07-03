@@ -83,12 +83,20 @@ def verificar(nome: str, lat: float, lon: float, est: dict) -> dict | None:
     """Retorna alerta se o dispositivo acabou de entrar em alguma loja."""
     if not lat or not lon:
         return None
+    # Sem histórico = primeiro contato após restart — só registra, não alerta
+    tem_historico = any(k.startswith("loja_") for k in est)
     for loja in carregar():
         dist = _haversine(lat, lon, loja["lat"], loja["lon"])
         dentro = dist <= loja.get("raio", _RAIO_PADRAO)
         chave  = f"loja_{loja['id']}"
         estava = est.get(chave, False)
         if dentro and not estava:
+            if not tem_historico:
+                log.debug(
+                    "[%s] Já estava na loja '%s' na inicialização — alerta suprimido",
+                    nome, loja["nome"],
+                )
+                return None
             log.info("📍 [%s] Chegou na loja '%s' (%.0fm)", nome, loja["nome"], dist)
             return {
                 "tipo":      CHEGOU_LOJA,
