@@ -40,7 +40,9 @@ def _tempo_ligado(hora_iso: str | None) -> str:
 def _fmt_km(odometro) -> str:
     if odometro is None:
         return "N/D"
-    return f"{odometro:,.2f} km".replace(",", ".")
+    inteiro, dec = f"{float(odometro):.2f}".split(".")
+    inteiro_br = f"{int(inteiro):,}".replace(",", ".")
+    return f"{inteiro_br},{dec} km"
 
 
 def _fmt_bat(bateria) -> str:
