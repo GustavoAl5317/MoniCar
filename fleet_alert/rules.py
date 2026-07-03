@@ -62,6 +62,69 @@ def _fmt_bat(bateria) -> str:
     return f"{bateria}%" if bateria not in (None, "N/D") else "N/D"
 
 
+CARROS_FROTA = ("GOL", "CELTA", "AGILE")
+
+
+def status_operacional(ignition, speed: float, motion: int) -> str:
+    if ignition is True and (motion == 1 or speed > config.SPEED_MOVING_KMPH):
+        return "Em movimento"
+    if ignition is True:
+        return "Ligado e parado"
+    if ignition is False:
+        return "Desligado"
+    return "Desconhecido"
+
+
+def montar_alerta_inicio(nome: str, pos: dict, device: dict) -> dict:
+    """Monta alerta de status ao reiniciar o servidor."""
+    hora        = agora_data_hora()
+    status_site = device.get("status", "desconhecido")
+
+    if not pos:
+        texto = (
+            f"🚀 *Sistema reiniciado* — status do *{nome}*\n\n"
+            f"Horário: {hora}.\n"
+            f"Rastreador: {status_site}.\n"
+            f"Posição: indisponível no momento."
+        )
+        audio = (
+            f"Alerta da frota. Sistema reiniciado. Veículo {nome}. "
+            f"Posição indisponível no momento. Rastreador {status_site}."
+        )
+        return {"tipo": "INICIO", "texto": texto, "audio": audio}
+
+    attrs    = pos.get("attributes", {})
+    speed    = round(pos.get("speed", 0), 1)
+    ignition = attrs.get("ignition")
+    motion   = 1 if attrs.get("motion") else 0
+    endereco = pos.get("address") or (
+        f"lat={pos.get('latitude', '?')}, lon={pos.get('longitude', '?')}"
+    )
+    bat         = _fmt_bat(attrs.get("batteryLevel") or attrs.get("battery"))
+    km          = _fmt_km(
+        round(attrs.get("odometer", 0) / 1000, 2) if attrs.get("odometer") else None
+    )
+    status_op   = status_operacional(ignition, speed, motion)
+    status_site = device.get("status", "desconhecido")
+
+    texto = (
+        f"🚀 *Sistema reiniciado* — status do *{nome}*\n\n"
+        f"Horário: {hora}.\n"
+        f"Estado: {status_op}.\n"
+        f"Rastreador: {status_site}.\n"
+        f"Velocidade: {speed} km/h.\n"
+        f"Localização: {endereco}.\n"
+        f"KM: {km}.\n"
+        f"Bateria: {bat}."
+    )
+    audio = (
+        f"Alerta da frota. Sistema reiniciado. Veículo {nome}. "
+        f"Estado: {status_op}. Velocidade: {speed} quilômetros por hora. "
+        f"Localização: {endereco}. Bateria: {bat}."
+    )
+    return {"tipo": "INICIO", "texto": texto, "audio": audio}
+
+
 def processar(nome: str, dados: dict) -> dict | None:
     """
     Aplica as regras de estado ao veículo.

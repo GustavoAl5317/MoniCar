@@ -57,8 +57,77 @@ def _carregar_dispositivos():
         _nomes = {d["id"]: d.get("name", f"device_{d['id']}") for d in r.json()}
         _traccar_para_display = _build_traccar_map()
         log.info("📡 %d dispositivo(s) | %d mapeado(s)", len(_nomes), len(_traccar_para_display))
+        return r.json()
     except Exception as e:
         log.error("Erro ao carregar dispositivos: %s", e)
+        return []
+
+
+def _inicializar_estado_veiculo(nome: str, pos: dict):
+    """Sincroniza estado sem disparar alertas de transição."""
+    attrs = pos.get("attributes", {})
+    lat   = pos.get("latitude")
+    lon   = pos.get("longitude")
+    dados = {
+        "ignition":     1 if attrs.get("ignition") else 0,
+        "motion":       1 if attrs.get("motion")   else 0,
+        "speed":        round(pos.get("speed", 0), 2),
+        "address":      pos.get("address", ""),
+        "odometer":     round(attrs.get("odometer", 0) / 1000, 2) if attrs.get("odometer") else None,
+        "batteryLevel": attrs.get("batteryLevel"),
+    }
+    if lat and lon:
+        dados["latitude"]  = lat
+        dados["longitude"] = lon
+        dados.update(geofence.estado_lojas(lat, lon))
+    state.atualizar(nome.upper(), dados)
+
+
+def _enviar_alertas_inicio():
+    """Envia status atual dos 3 carros nos grupos WhatsApp ao iniciar o servidor."""
+    try:
+        devices   = _session.get(f"{config.TRACCAR_URL}/api/devices", timeout=15).json()
+        positions = _session.get(f"{config.TRACCAR_URL}/api/positions", timeout=15).json()
+    except Exception as e:
+        log.error("Falha ao buscar dados para alerta inicial: %s", e)
+        return
+
+    dev_por_id = {d["id"]: d for d in devices}
+    pos_por_id = {p["deviceId"]: p for p in positions}
+    traccar_para_id = {nome: did for did, nome in _nomes.items()}
+
+    log.info("📤 Enviando alerta inicial da frota (GOL, CELTA, AGILE)...")
+
+    for nome in rules.CARROS_FROTA:
+        cfg = config.VEICULOS.get(nome, {})
+        if cfg.get("tipo") != "veiculo" or not cfg.get("ativo") or not cfg.get("grupo_id"):
+            continue
+
+        tn  = cfg.get("traccar_nome")
+        did = traccar_para_id.get(tn)
+        if not did:
+            log.warning("[%s] Dispositivo '%s' não encontrado no Traccar", nome, tn)
+            continue
+
+        pos    = pos_por_id.get(did, {})
+        device = dev_por_id.get(did, {})
+
+        if pos:
+            _inicializar_estado_veiculo(nome, pos)
+
+        alerta = rules.montar_alerta_inicio(nome, pos, device)
+        registrar(nome, alerta["tipo"], alerta["texto"][:200])
+
+        audio_b64 = gerar_audio_base64(alerta["audio"])
+        ok = enviar_alerta(nome, alerta["texto"], audio_b64)
+        registrar(nome, "ENVIO", "ok" if ok else "falha")
+
+        if ok:
+            log.info("✅ Alerta inicial enviado para %s", nome)
+        else:
+            log.warning("⚠️  Falha no alerta inicial de %s", nome)
+
+        time.sleep(2)  # evita flood na Evolution API
 
 
 # ── Processamento ─────────────────────────────────────────────────
@@ -197,7 +266,9 @@ def iniciar_coletor():
     _carregar_dispositivos()
 
     if not verificar_conexao():
-        log.warning("Reconecte o WhatsApp na Evolution API para os alertas dos carros voltarem a funcionar")
+        log.warning("WhatsApp desconectado — alerta inicial pode falhar")
+
+    _enviar_alertas_inicio()
 
     cookies = "; ".join(f"{k}={v}" for k, v in _session.cookies.items())
     ws_url  = (
