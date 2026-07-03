@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime
 from fleet_alert import state, config
+from fleet_alert.timeutil import agora, agora_iso, hora_evento, parse_traccar, TZ_BR
 
 log = logging.getLogger(__name__)
 
@@ -8,20 +9,26 @@ LIGADO_PARADO = "LIGADO_PARADO"
 EM_MOVIMENTO  = "EM_MOVIMENTO"
 DESLIGADO     = "DESLIGADO"
 
+# Cooldown mínimo entre alertas consecutivos do mesmo veículo (segundos)
+_COOLDOWN_MOVIMENTO = 180   # 3 min entre parado↔movimento (oscilação GPS)
+_COOLDOWN_GERAL     = 60    # 1 min entre qualquer outro alerta
 
-def _agora() -> str:
-    return datetime.now().strftime("%H:%M")
 
-
-def _agora_iso() -> str:
-    return datetime.now().isoformat()
+def _segundos_desde_ultimo_alerta(est: dict) -> float:
+    ts = est.get("ultimo_alerta_ts")
+    if not ts:
+        return float("inf")
+    try:
+        return (datetime.now(TZ_BR) - datetime.fromisoformat(ts)).total_seconds()
+    except Exception:
+        return float("inf")
 
 
 def _tempo_ligado(hora_iso: str | None) -> str:
     if not hora_iso:
         return "N/D"
     try:
-        delta   = datetime.now() - datetime.fromisoformat(hora_iso)
+        delta   = datetime.now(TZ_BR) - datetime.fromisoformat(hora_iso)
         minutos = int(delta.total_seconds() // 60)
         if minutos >= 60:
             return f"{minutos // 60}h {minutos % 60}min"
@@ -56,6 +63,12 @@ def processar(nome: str, dados: dict) -> dict | None:
     endereco   = dados.get("address")  or "Endereço não disponível"
     bateria    = dados.get("batteryLevel") or dados.get("battery")
     odometro   = dados.get("odometer")
+    hora_evt   = hora_evento(dados.get("event_time"))
+    hora_evt_iso = (
+        parse_traccar(dados.get("event_time")).isoformat()
+        if parse_traccar(dados.get("event_time"))
+        else agora_iso()
+    )
 
     km_str  = _fmt_km(odometro)
     bat_str = _fmt_bat(bateria)
@@ -64,7 +77,7 @@ def processar(nome: str, dados: dict) -> dict | None:
 
     # ── Veículo desligou ─────────────────────────────────────────
     if ig_ant == 1 and ig_atual == 0:
-        hora_desligou = _agora()
+        hora_desligou = hora_evt
         tempo_str     = _tempo_ligado(est.get("hora_ligou_iso"))
 
         state.atualizar(nome, {
@@ -95,11 +108,11 @@ def processar(nome: str, dados: dict) -> dict | None:
 
     # ── Veículo ligou (estava desligado ou sem dados) ─────────────
     elif ig_ant != 1 and ig_atual == 1:
-        hora_ligou = _agora()
+        hora_ligou = hora_evt
         state.atualizar(nome, {
             "ignition":       1,
             "hora_ligou":     hora_ligou,
-            "hora_ligou_iso": _agora_iso(),
+            "hora_ligou_iso": hora_evt_iso,
             "ultimo_alerta":  None,
         })
 
@@ -112,16 +125,24 @@ def processar(nome: str, dados: dict) -> dict | None:
     elif (ig_atual == 1
           and alerta_ant != EM_MOVIMENTO
           and (motion == 1 or speed > config.SPEED_MOVING_KMPH)):
-        hora_ligou = est.get("hora_ligou", _agora())
-        resultado  = _alerta_movimento(nome, hora_ligou, speed, endereco, km_str, bat_str)
+        seg = _segundos_desde_ultimo_alerta(est)
+        if seg >= _COOLDOWN_MOVIMENTO:
+            hora_ligou = est.get("hora_ligou", hora_evt)
+            resultado  = _alerta_movimento(nome, hora_ligou, speed, endereco, km_str, bat_str)
+        else:
+            log.debug("[%s] EM_MOVIMENTO suprimido — cooldown (%ds restantes)", nome, int(_COOLDOWN_MOVIMENTO - seg))
 
     # ── Estava andando, parou ────────────────────────────────────
     elif (ig_atual == 1
           and alerta_ant == EM_MOVIMENTO
           and motion == 0
           and speed <= config.SPEED_STOPPED_KMPH):
-        hora_ligou = est.get("hora_ligou", _agora())
-        resultado  = _alerta_ligado_parado(nome, hora_ligou, endereco, km_str, bat_str)
+        seg = _segundos_desde_ultimo_alerta(est)
+        if seg >= _COOLDOWN_MOVIMENTO:
+            hora_ligou = est.get("hora_ligou", hora_evt)
+            resultado  = _alerta_ligado_parado(nome, hora_ligou, endereco, km_str, bat_str)
+        else:
+            log.debug("[%s] LIGADO_PARADO suprimido — cooldown (%ds restantes)", nome, int(_COOLDOWN_MOVIMENTO - seg))
 
     # Sempre atualiza estado com dados mais recentes
     state.atualizar(nome, {
@@ -134,7 +155,10 @@ def processar(nome: str, dados: dict) -> dict | None:
     })
 
     if resultado:
-        state.atualizar(nome, {"ultimo_alerta": resultado["tipo"]})
+        state.atualizar(nome, {
+            "ultimo_alerta":    resultado["tipo"],
+            "ultimo_alerta_ts": agora_iso(),
+        })
         log.info("🚨 [%s] %s → %s", resultado["tipo"], nome, alerta_ant)
 
     return resultado
@@ -157,6 +181,75 @@ def _alerta_ligado_parado(nome, hora_ligou, endereco, km_str, bat_str) -> dict:
             f"Bateria em {bat_str}."
         ),
     }
+
+
+def processar_celular(nome: str, dados: dict) -> dict | None:
+    """Regras para celular: sem ignição, usa só velocidade/movimento."""
+    est        = state.get(nome)
+    alerta_ant = est.get("ultimo_alerta")
+
+    motion   = dados.get("motion", 0)
+    speed    = dados.get("speed",  0)
+    endereco = dados.get("address") or "Endereço não disponível"
+    bateria  = dados.get("batteryLevel") or dados.get("battery")
+    bat_str  = _fmt_bat(bateria)
+
+    resultado = None
+    em_movimento = motion == 1 or speed > config.SPEED_MOVING_KMPH
+    parado       = motion == 0 and speed <= config.SPEED_STOPPED_KMPH
+
+    if em_movimento and alerta_ant != EM_MOVIMENTO:
+        seg = _segundos_desde_ultimo_alerta(est)
+        if seg >= _COOLDOWN_MOVIMENTO:
+            hora = hora_evento(dados.get("event_time"))
+            resultado = {
+                "tipo":  EM_MOVIMENTO,
+                "texto": (
+                    f"🟢 *{nome}* em movimento.\n\n"
+                    f"Horário: {hora}.\n"
+                    f"Localização: {endereco}.\n"
+                    f"Velocidade: {speed:.0f} km/h.\n"
+                    f"Bateria: {bat_str}."
+                ),
+                "audio": (
+                    f"Alerta da frota. O celular {nome} está em movimento. "
+                    f"Localização: {endereco}. Velocidade: {speed:.0f} quilômetros por hora."
+                ),
+            }
+
+    elif parado and alerta_ant == EM_MOVIMENTO:
+        seg = _segundos_desde_ultimo_alerta(est)
+        if seg >= _COOLDOWN_MOVIMENTO:
+            hora = hora_evento(dados.get("event_time"))
+            resultado = {
+                "tipo":  LIGADO_PARADO,
+                "texto": (
+                    f"🟡 *{nome}* parou.\n\n"
+                    f"Horário: {hora}.\n"
+                    f"Localização: {endereco}.\n"
+                    f"Bateria: {bat_str}."
+                ),
+                "audio": (
+                    f"Alerta da frota. O celular {nome} parou. "
+                    f"Localização: {endereco}. Bateria em {bat_str}."
+                ),
+            }
+
+    state.atualizar(nome, {
+        "motion":       motion,
+        "speed":        speed,
+        "address":      endereco,
+        "batteryLevel": bateria,
+    })
+
+    if resultado:
+        state.atualizar(nome, {
+            "ultimo_alerta":    resultado["tipo"],
+            "ultimo_alerta_ts": agora_iso(),
+        })
+        log.info("📱 [%s] %s → %s", resultado["tipo"], nome, alerta_ant)
+
+    return resultado
 
 
 def _alerta_movimento(nome, hora_ligou, speed, endereco, km_str, bat_str) -> dict:

@@ -1,8 +1,8 @@
 import sqlite3
 import logging
 import os
-from datetime import datetime
 from fleet_alert import config
+from fleet_alert.timeutil import agora_iso
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ def registrar(veiculo: str, tipo: str, detalhe: str = ""):
         with _conn() as conn:
             conn.execute(
                 "INSERT INTO logs (ts, veiculo, tipo, detalhe) VALUES (?,?,?,?)",
-                (datetime.now().isoformat(), veiculo.upper(), tipo, detalhe),
+                (agora_iso(), veiculo.upper(), tipo, detalhe),
             )
     except Exception as e:
         log.warning("Falha ao gravar log: %s", e)
@@ -61,7 +61,7 @@ def registrar_posicao(veiculo: str, ignition: int, motion: int, speed: float,
             conn.execute(
                 """INSERT INTO posicoes (ts, veiculo, ignition, motion, speed, address, battery, odometer)
                    VALUES (?,?,?,?,?,?,?,?)""",
-                (datetime.now().isoformat(), veiculo.upper(),
+                (agora_iso(), veiculo.upper(),
                  ignition, motion, speed, address, battery, odometer),
             )
             # Mantém só os últimos _MAX_POSICOES registros por veículo

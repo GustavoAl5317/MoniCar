@@ -3,15 +3,22 @@ import time
 import logging
 import requests
 import websocket
-from fleet_alert import config, rules
-from fleet_alert.whatsapp import enviar_alerta
+from fleet_alert.timeutil import hora_evento
+from fleet_alert import config, state
+from fleet_alert import rules, geofence
+from fleet_alert.whatsapp import enviar_alerta, verificar_conexao
 from fleet_alert.audio import gerar_audio_base64
 from fleet_alert.db import registrar, registrar_posicao
 
 log = logging.getLogger(__name__)
 
 _session  = requests.Session()
-_nomes: dict = {}   # { deviceId: nome_traccar }
+_nomes: dict = {}          # { deviceId: nome_traccar }
+_desconhecidos: dict = {}  # { traccar_nome: True } — vistos mas não mapeados
+
+
+def get_desconhecidos() -> list:
+    return [{"traccar_nome": n} for n in sorted(_desconhecidos.keys())]
 
 # Mapeamento nome_traccar → nome_exibição (chave de config.VEICULOS)
 def _build_traccar_map() -> dict:
@@ -65,6 +72,7 @@ def _processar_posicao(pos: dict):
     # Resolve nome de exibição via mapeamento traccar_nome → display
     nome = _traccar_para_display.get(nome_traccar)
     if not nome:
+        _desconhecidos[nome_traccar] = True
         return
 
     attrs = pos.get("attributes", {})
@@ -78,6 +86,7 @@ def _processar_posicao(pos: dict):
         "batteryLevel": attrs.get("batteryLevel"),
         "battery":      attrs.get("battery"),
         "odometer":     round(attrs.get("odometer", 0) / 1000, 2) if attrs.get("odometer") else None,
+        "event_time":   pos.get("deviceTime") or pos.get("fixTime"),
     }
 
     # Registra todos os dados recebidos
@@ -87,7 +96,43 @@ def _processar_posicao(pos: dict):
         dados["address"], dados.get("batteryLevel"), dados.get("odometer"),
     )
 
-    resultado = rules.processar(nome.upper(), dados)
+    cfg_veiculo = config.VEICULOS.get(nome.upper(), {})
+    if cfg_veiculo.get("tipo") == "celular":
+        resultado = rules.processar_celular(nome.upper(), dados)
+    else:
+        resultado = rules.processar(nome.upper(), dados)
+
+    # ── Geofence (lojas) ──────────────────────────────────────────
+    lat = dados.get("latitude")
+    lon = dados.get("longitude")
+    if lat and lon:
+        est_atual = state.get(nome.upper())
+        chegou    = geofence.verificar(nome.upper(), lat, lon, est_atual)
+        if chegou:
+            hora      = hora_evento(pos.get("deviceTime") or pos.get("fixTime"))
+            loja_nome = chegou["loja_nome"]
+            endereco  = dados.get("address") or "N/D"
+            texto_loja = (
+                f"📍 *{nome}* chegou na loja *{loja_nome}*.\n\n"
+                f"Horário: {hora}.\n"
+                f"Localização: {endereco}."
+            )
+            audio_loja = (
+                f"Alerta da frota. {nome} chegou na loja {loja_nome}. "
+                f"Horário: {hora}. Localização: {endereco}."
+            )
+            registrar(nome, geofence.CHEGOU_LOJA, texto_loja[:200])
+            audio_b64_loja = gerar_audio_base64(audio_loja)
+            ok_loja = enviar_alerta(nome.upper(), texto_loja, audio_b64_loja)
+            registrar(nome, "ENVIO", "ok" if ok_loja else "falha")
+        # Sempre atualiza estado de presença nas lojas e salva coordenadas
+        state.atualizar(nome.upper(), {
+            "latitude":  lat,
+            "longitude": lon,
+            **geofence.estado_lojas(lat, lon),
+        })
+    # ─────────────────────────────────────────────────────────────
+
     if not resultado:
         return
 
@@ -96,6 +141,11 @@ def _processar_posicao(pos: dict):
     audio_txt = resultado["audio"]
 
     registrar(nome, tipo, texto[:200])
+
+    # Celulares: registra no painel, sem WhatsApp
+    if cfg_veiculo.get("tipo") == "celular":
+        log.debug("Celular '%s' — %s registrado apenas no painel", nome, tipo)
+        return
 
     audio_b64 = gerar_audio_base64(audio_txt)
     ok = enviar_alerta(nome.upper(), texto, audio_b64)
@@ -143,6 +193,9 @@ def iniciar_coletor():
         return
 
     _carregar_dispositivos()
+
+    if not verificar_conexao():
+        log.warning("Reconecte o WhatsApp na Evolution API para os alertas dos carros voltarem a funcionar")
 
     cookies = "; ".join(f"{k}={v}" for k, v in _session.cookies.items())
     ws_url  = (

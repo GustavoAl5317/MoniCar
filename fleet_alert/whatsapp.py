@@ -50,16 +50,56 @@ def enviar_texto(grupo_id: str, mensagem: str) -> bool:
 
 def enviar_audio(grupo_id: str, audio_base64: str) -> bool:
     payload = {
-        "number":    grupo_id,
-        "mediatype": "audio",
-        "mimetype":  "audio/ogg; codecs=opus",
-        "media":     audio_base64,
-        "fileName":  "alerta.ogg",
+        "number":   grupo_id,
+        "audio":    audio_base64,
+        "encoding": True,
     }
-    ok = _post("message/sendMedia", payload)
+    ok = _post("message/sendWhatsAppAudio", payload)
     if ok:
-        log.info("🔊 Áudio enviado → %s", grupo_id)
+        log.info("🎤 Voz enviada → %s", grupo_id)
     return ok
+
+
+def verificar_conexao() -> bool:
+    """Verifica se a instância WhatsApp está conectada na Evolution API."""
+    try:
+        r = requests.get(
+            f"{config.EVOLUTION_URL}/instance/fetchInstances",
+            headers=_headers(),
+            timeout=10,
+        )
+        if r.status_code != 200:
+            log.error("Evolution API inacessível (HTTP %d)", r.status_code)
+            return False
+        dados = r.json()
+        instancias = dados if isinstance(dados, list) else [dados]
+        for inst in instancias:
+            nome = (
+                inst.get("instance", {}).get("instanceName")
+                or inst.get("instanceName")
+                or inst.get("name")
+            )
+            if nome != config.EVOLUTION_INSTANCE:
+                continue
+            status = (
+                inst.get("instance", {}).get("connectionStatus")
+                or inst.get("connectionStatus")
+                or inst.get("state")
+                or ""
+            )
+            if str(status).lower() in ("open", "connected"):
+                log.info("WhatsApp conectado (instância %s)", config.EVOLUTION_INSTANCE)
+                return True
+            log.critical(
+                "WhatsApp DESCONECTADO (instância %s, status=%s) — alertas não serão enviados",
+                config.EVOLUTION_INSTANCE, status,
+            )
+            return False
+        log.error("Instância '%s' não encontrada na Evolution API", config.EVOLUTION_INSTANCE)
+        return False
+    except Exception as e:
+        log.error("Falha ao verificar conexão WhatsApp: %s", e)
+        return False
 
 
 def enviar_alerta(nome: str, texto: str, audio_base64: str | None = None) -> bool:
@@ -67,6 +107,9 @@ def enviar_alerta(nome: str, texto: str, audio_base64: str | None = None) -> boo
     if not cfg:
         log.warning("Veículo '%s' não mapeado em config.VEICULOS", nome)
         return False
+    if cfg.get("tipo") == "celular":
+        log.debug("Celular '%s' — alerta WhatsApp desabilitado", nome)
+        return True
     if not cfg.get("ativo", True):
         log.info("Veículo '%s' desativado — alerta ignorado", nome)
         return False

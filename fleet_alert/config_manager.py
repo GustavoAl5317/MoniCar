@@ -52,3 +52,33 @@ def salvar(nome: str, grupo_id: str, ativo: bool):
     config.VEICULOS[nome]["grupo_id"] = grupo_id
     config.VEICULOS[nome]["ativo"]    = ativo
     log.info("Config salva: %s → grupo=%s ativo=%s", nome, grupo_id, ativo)
+
+
+def adicionar_dispositivo(nome: str, traccar_nome: str, grupo_id: str, tipo: str, ativo: bool = True):
+    """Adiciona novo dispositivo descoberto via painel."""
+    p = _path()
+    with _lock:
+        overrides = {}
+        if os.path.exists(p):
+            try:
+                with open(p, encoding="utf-8") as f:
+                    overrides = json.load(f)
+            except Exception:
+                pass
+        overrides[nome] = {
+            "traccar_nome": traccar_nome,
+            "grupo_id":     grupo_id or None,
+            "ativo":        ativo,
+            "tipo":         tipo,
+        }
+        os.makedirs(os.path.dirname(os.path.abspath(p)), exist_ok=True)
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(overrides, f, ensure_ascii=False, indent=2)
+
+    config.VEICULOS[nome] = {
+        "traccar_nome": traccar_nome,
+        "grupo_id":     grupo_id or None,
+        "ativo":        ativo,
+        "tipo":         tipo,
+    }
+    log.info("Dispositivo adicionado: %s (%s) tipo=%s grupo=%s", nome, traccar_nome, tipo, grupo_id)

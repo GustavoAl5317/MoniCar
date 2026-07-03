@@ -7,221 +7,636 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    :root {
+      --bg:       #0f172a;
+      --surface:  #1e293b;
+      --border:   #334155;
+      --muted:    #64748b;
+      --text:     #e2e8f0;
+      --sub:      #94a3b8;
+      --blue:     #3b82f6;
+      --blue-d:   #1d4ed8;
+      --green:    #22c55e;
+      --orange:   #f97316;
+      --red:      #ef4444;
+      --sidebar-w: 220px;
+    }
+
     body {
       font-family: system-ui, -apple-system, sans-serif;
-      background: #0f172a;
-      color: #e2e8f0;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: var(--sidebar-w);
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      z-index: 100;
+    }
+
+    .sidebar-logo {
+      padding: 1.25rem 1.2rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-logo .logo-title {
+      font-size: 1.05rem;
+      font-weight: 800;
+      color: #f1f5f9;
+      letter-spacing: .02em;
+    }
+    .sidebar-logo .logo-sub {
+      font-size: .7rem;
+      color: var(--muted);
+      margin-top: .15rem;
+    }
+
+    nav { flex: 1; padding: .75rem 0; }
+    .nav-section {
+      font-size: .65rem;
+      font-weight: 700;
+      color: var(--muted);
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      padding: .6rem 1.2rem .3rem;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: .65rem;
+      padding: .55rem 1.2rem;
+      font-size: .85rem;
+      color: var(--sub);
+      cursor: pointer;
+      border-radius: 0;
+      transition: background .15s, color .15s;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+    }
+    .nav-item:hover { background: #ffffff0d; color: var(--text); }
+    .nav-item.active {
+      background: #3b82f618;
+      color: var(--blue);
+      font-weight: 600;
+      border-right: 2px solid var(--blue);
+    }
+    .nav-icon { font-size: 1rem; width: 1.1rem; text-align: center; }
+
+    .sidebar-footer {
+      padding: .9rem 1.2rem;
+      border-top: 1px solid var(--border);
+    }
+    .btn-logout {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      width: 100%;
+      padding: .45rem .7rem;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: .8rem;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .btn-logout:hover { border-color: var(--red); color: var(--red); background: #ef444410; }
+
+    /* ── Main ── */
+    .main {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      display: flex;
+      flex-direction: column;
       min-height: 100vh;
     }
 
-    header {
-      background: #1e293b;
-      border-bottom: 1px solid #334155;
-      padding: .9rem 1.5rem;
+    .topbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: .8rem 1.5rem;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 50;
     }
-    header h1 { font-size: 1.1rem; font-weight: 700; letter-spacing: .02em; }
-    #atualizado { font-size: .75rem; color: #64748b; }
+    .topbar-title { font-size: .95rem; font-weight: 600; color: #f1f5f9; }
+    .topbar-right { display: flex; align-items: center; gap: 1rem; }
+    #atualizado { font-size: .73rem; color: var(--muted); }
+    .dot-live { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--green); margin-right: .35rem; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
-    .container { padding: 1.25rem 1.5rem; max-width: 1080px; margin: 0 auto; }
+    .content { padding: 1.5rem; flex: 1; }
 
-    /* ── Cards ── */
-    .cards {
+    /* ── Seções ── */
+    .section { display: none; }
+    .section.active { display: block; }
+
+    /* ── Stats ── */
+    .stats-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 1rem;
-      margin-bottom: 2rem;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: .85rem;
+      margin-bottom: 1.5rem;
     }
-    .card {
-      background: #1e293b;
-      border: 1px solid #334155;
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 1.1rem 1.25rem;
-      transition: opacity .2s;
+      padding: 1rem 1.1rem;
     }
-    .card.inativo { opacity: .45; }
+    .stat-label { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: .4rem; }
+    .stat-value { font-size: 1.7rem; font-weight: 800; color: #f1f5f9; line-height: 1; }
+    .stat-sub { font-size: .7rem; color: var(--muted); margin-top: .3rem; }
 
-    .card-top {
+    /* ── Cards veículos ── */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+      gap: 1rem;
+    }
+    .vcard {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.1rem 1.25rem;
+      transition: opacity .2s, border-color .2s;
+    }
+    .vcard:hover { border-color: #475569; }
+    .vcard.inativo { opacity: .45; }
+
+    .vcard-top {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      margin-bottom: .85rem;
+      align-items: flex-start;
+      margin-bottom: .9rem;
     }
-    .card-nome { font-size: 1.05rem; font-weight: 700; }
+    .vcard-nome { font-size: 1rem; font-weight: 700; color: #f1f5f9; }
+    .vcard-grupo { font-size: .68rem; color: var(--muted); margin-top: .2rem; }
 
     .badge {
-      font-size: .68rem;
+      font-size: .65rem;
       font-weight: 700;
-      padding: .2rem .55rem;
+      padding: .22rem .6rem;
       border-radius: 999px;
       letter-spacing: .04em;
       text-transform: uppercase;
+      white-space: nowrap;
     }
     .b-off    { background: #450a0a; color: #fca5a5; }
     .b-parado { background: #451a03; color: #fdba74; }
     .b-move   { background: #052e16; color: #86efac; }
-    .b-nd     { background: #1e293b; color: #64748b; border: 1px solid #334155; }
+    .b-nd     { background: #1e293b; color: #64748b; border: 1px solid var(--border); }
+
+    .vcard-divider { border: none; border-top: 1px solid #0f172a; margin: .65rem 0; }
 
     .info-row {
       display: flex;
       justify-content: space-between;
-      font-size: .8rem;
-      padding: .28rem 0;
-      border-bottom: 1px solid #0f172a;
-    }
-    .info-row:last-of-type { border-bottom: none; }
-    .info-label { color: #64748b; }
-    .info-val   { color: #cbd5e1; text-align: right; max-width: 65%; word-break: break-word; }
-
-    .btn-toggle {
-      margin-top: .85rem;
-      width: 100%;
-      padding: .4rem;
-      background: #0f172a;
-      border: 1px solid #334155;
-      border-radius: 8px;
-      color: #94a3b8;
+      align-items: flex-start;
       font-size: .78rem;
-      cursor: pointer;
-      transition: background .15s, color .15s;
+      padding: .22rem 0;
     }
-    .btn-toggle:hover { background: #1e293b; color: #e2e8f0; }
+    .info-label { color: var(--muted); flex-shrink: 0; }
+    .info-val   { color: #cbd5e1; text-align: right; max-width: 62%; word-break: break-word; }
+
+    .vcard-actions { margin-top: .9rem; display: flex; gap: .5rem; }
+    .btn-toggle {
+      flex: 1;
+      padding: .38rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--sub);
+      font-size: .75rem;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .btn-toggle:hover { background: var(--surface); color: var(--text); }
+    .btn-toggle.ativo { border-color: #ef444440; color: #fca5a5; }
 
     /* ── Logs ── */
-    .logs-header {
+    .logs-toolbar {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: .6rem;
+      margin-bottom: .85rem;
+      gap: .75rem;
+      flex-wrap: wrap;
     }
-    .logs-header h2 { font-size: .95rem; font-weight: 600; }
+    .logs-toolbar h2 { font-size: .9rem; font-weight: 600; }
+    .logs-filter {
+      display: flex;
+      gap: .5rem;
+      flex-wrap: wrap;
+    }
+    .filter-btn {
+      padding: .3rem .7rem;
+      font-size: .72rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: none;
+      color: var(--sub);
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .filter-btn.active, .filter-btn:hover { background: var(--blue); border-color: var(--blue); color: #fff; }
 
-    .table-wrap { overflow-x: auto; }
+    .table-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid var(--border); }
     table { width: 100%; border-collapse: collapse; font-size: .78rem; }
     th {
       text-align: left;
-      padding: .45rem .6rem;
-      background: #1e293b;
-      color: #64748b;
-      font-weight: 500;
-      border-bottom: 1px solid #334155;
+      padding: .55rem .75rem;
+      background: var(--surface);
+      color: var(--muted);
+      font-weight: 600;
+      font-size: .7rem;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      border-bottom: 1px solid var(--border);
     }
-    td { padding: .4rem .6rem; border-bottom: 1px solid #1e293b; color: #cbd5e1; }
-    tr:hover td { background: #1e293b55; }
+    td { padding: .45rem .75rem; border-bottom: 1px solid #1e293b55; color: #cbd5e1; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #ffffff05; }
 
-    .tipo-LIGADO_PARADO { color: #fdba74; font-weight: 600; }
-    .tipo-EM_MOVIMENTO  { color: #86efac; font-weight: 600; }
-    .tipo-DESLIGADO     { color: #fca5a5; font-weight: 600; }
-    .tipo-ENVIO         { color: #64748b; }
-    .tipo-POSICAO       { color: #334155; }
+    .tipo-pill {
+      display: inline-block;
+      font-size: .65rem;
+      font-weight: 700;
+      padding: .15rem .5rem;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .tipo-LIGADO_PARADO { background: #451a03; color: #fdba74; }
+    .tipo-EM_MOVIMENTO  { background: #052e16; color: #86efac; }
+    .tipo-DESLIGADO     { background: #450a0a; color: #fca5a5; }
+    .tipo-ENVIO         { background: #0c1a2e; color: #60a5fa; }
+    .tipo-POSICAO       { background: #1e293b; color: #475569; }
+    .tipo-ERRO          { background: #450a0a; color: #fca5a5; }
 
-    .config-section { margin-top: 2rem; }
-    .config-section h2 { font-size: .95rem; font-weight: 600; margin-bottom: .75rem; }
-    .config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: .85rem; }
-    .config-card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 1rem 1.1rem; }
-    .config-label { font-size: .75rem; color: #64748b; margin-bottom: .3rem; }
-    .config-nome { font-size: .9rem; font-weight: 600; color: #f1f5f9; margin-bottom: .6rem; }
-    .config-input { width: 100%; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #e2e8f0; font-size: .8rem; padding: .4rem .6rem; margin-bottom: .5rem; }
-    .config-input:focus { outline: none; border-color: #475569; }
-    .btn-salvar { width: 100%; padding: .4rem; background: #1d4ed8; border: none; border-radius: 8px; color: #fff; font-size: .78rem; cursor: pointer; }
-    .btn-salvar:hover { background: #2563eb; }
-    .msg-ok  { font-size: .72rem; color: #86efac; margin-top: .3rem; display: none; }
-    .msg-err { font-size: .72rem; color: #fca5a5; margin-top: .3rem; display: none; }
+    /* ── Config ── */
+    .config-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+      gap: 1rem;
+    }
+    .ccard {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.1rem 1.25rem;
+    }
+    .ccard-nome { font-size: .95rem; font-weight: 700; color: #f1f5f9; margin-bottom: .2rem; }
+    .ccard-label { font-size: .72rem; color: var(--muted); margin-bottom: .5rem; }
+    .ccard-input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: .8rem;
+      padding: .45rem .65rem;
+      margin-bottom: .55rem;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .ccard-input:focus { border-color: var(--blue); }
+    .btn-save {
+      width: 100%;
+      padding: .42rem;
+      background: var(--blue-d);
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      font-size: .78rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .btn-save:hover { background: var(--blue); }
+    .msg-ok  { font-size: .72rem; color: #86efac; margin-top: .35rem; display: none; }
+    .msg-err { font-size: .72rem; color: #fca5a5; margin-top: .35rem; display: none; }
+
+    /* ── Sem dados ── */
+    .empty { text-align: center; padding: 3rem 1rem; color: var(--muted); font-size: .85rem; }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
   </style>
 </head>
 <body>
 
-<header>
-  <h1>Fleet Alert</h1>
-  <span id="atualizado">Carregando...</span>
-</header>
-
-<div class="container">
-  <div class="cards" id="cards"></div>
-
-  <div class="logs-header">
-    <h2>Últimos eventos</h2>
-  </div>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Horário</th>
-          <th>Veículo</th>
-          <th>Tipo</th>
-          <th>Detalhe</th>
-        </tr>
-      </thead>
-      <tbody id="logs-body"></tbody>
-    </table>
+<!-- ── Sidebar ── -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-title">Fleet Alert</div>
+    <div class="logo-sub">Monitoramento de frota</div>
   </div>
 
-  <div class="config-section">
-    <h2>Configuração de grupos</h2>
-    <div class="config-grid" id="config-grid"></div>
+  <nav>
+    <div class="nav-section">Principal</div>
+    <button class="nav-item active" onclick="navTo('dashboard', this)">
+      <span class="nav-icon">📊</span> Dashboard
+    </button>
+    <button class="nav-item" onclick="navTo('veiculos', this)">
+      <span class="nav-icon">🚗</span> Veículos
+    </button>
+
+    <div class="nav-section" style="margin-top:.5rem">Dados</div>
+    <button class="nav-item" onclick="navTo('logs', this)">
+      <span class="nav-icon">📋</span> Eventos
+    </button>
+
+    <div class="nav-section" style="margin-top:.5rem">Gerador</div>
+    <button class="nav-item" onclick="navTo('dse', this)">
+      <span class="nav-icon">⚡</span> Cálculos DSE
+    </button>
+
+    <div class="nav-section" style="margin-top:.5rem">Sistema</div>
+    <button class="nav-item" onclick="navTo('config', this)">
+      <span class="nav-icon">⚙️</span> Configurações
+    </button>
+  </nav>
+
+  <div class="sidebar-footer">
+    <button class="btn-logout" onclick="location.href='/logout'">
+      <span>⬅</span> Sair
+    </button>
   </div>
-</div>
+</aside>
+
+<!-- ── Main ── -->
+<main class="main">
+  <div class="topbar">
+    <div class="topbar-title" id="page-title">Dashboard</div>
+    <div class="topbar-right">
+      <span id="atualizado"><span class="dot-live"></span>Carregando...</span>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- Dashboard -->
+    <div class="section active" id="sec-dashboard">
+      <div class="stats-grid" id="stats"></div>
+      <div class="cards-grid" id="cards-dash"></div>
+    </div>
+
+    <!-- Veículos -->
+    <div class="section" id="sec-veiculos">
+      <div class="cards-grid" id="cards-full"></div>
+    </div>
+
+    <!-- Logs -->
+    <div class="section" id="sec-logs">
+      <div class="logs-toolbar">
+        <h2>Eventos</h2>
+        <div class="logs-filter">
+          <button class="filter-btn active" onclick="filtrarLog('', this)">Todos</button>
+          <button class="filter-btn" onclick="filtrarLog('EM_MOVIMENTO', this)">Movimento</button>
+          <button class="filter-btn" onclick="filtrarLog('LIGADO_PARADO', this)">Parado</button>
+          <button class="filter-btn" onclick="filtrarLog('DESLIGADO', this)">Desligado</button>
+          <button class="filter-btn" onclick="filtrarLog('ENVIO', this)">Envios</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Horário</th>
+              <th>Veículo</th>
+              <th>Tipo</th>
+              <th>Detalhe</th>
+            </tr>
+          </thead>
+          <tbody id="logs-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- DSE Gerador -->
+    <div class="section" id="sec-dse">
+      <div id="dse-offline" style="display:none;color:var(--muted);padding:2rem 0">⚡ Aguardando dados do Zabbix...</div>
+      <div id="dse-content">
+        <!-- Estado geral -->
+        <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem">
+          <div id="dse-badge" style="font-size:1.1rem;font-weight:700;padding:.4rem 1rem;border-radius:999px;background:#1e293b;border:1px solid #334155">—</div>
+          <div style="color:var(--muted);font-size:.85rem">Última atualização: <span id="dse-atualizado">—</span></div>
+        </div>
+
+        <div class="config-grid" style="margin-bottom:1.5rem">
+          <!-- Combustível -->
+          <div class="ccard" style="border-color:#f9731640">
+            <div class="ccard-nome" style="color:#f97316">⛽ Combustível</div>
+            <div class="info-row"><span class="info-label">Nível</span><span class="info-val" id="dse-fuel-pct">—</span></div>
+            <div class="info-row"><span class="info-label">Volume</span><span class="info-val" id="dse-fuel-l">—</span></div>
+            <div class="info-row"><span class="info-label">Taxa consumo</span><span class="info-val" id="dse-taxa">—</span></div>
+            <div class="info-row"><span class="info-label">Autonomia</span><span class="info-val" id="dse-autonomia">—</span></div>
+            <div class="info-row"><span class="info-label">Prev. zeramento</span><span class="info-val" id="dse-previsao">—</span></div>
+            <div class="info-row"><span class="info-label">Consumo sessão</span><span class="info-val" id="dse-consumo-sessao">—</span></div>
+          </div>
+
+          <!-- Motor -->
+          <div class="ccard" style="border-color:#3b82f640">
+            <div class="ccard-nome" style="color:#3b82f6">🔧 Motor</div>
+            <div class="info-row"><span class="info-label">RPM</span><span class="info-val" id="dse-rpm">—</span></div>
+            <div class="info-row"><span class="info-label">Freq. gerador</span><span class="info-val" id="dse-freq-gen">—</span></div>
+            <div class="info-row"><span class="info-label">Freq. rede</span><span class="info-val" id="dse-freq-rede">—</span></div>
+            <div class="info-row"><span class="info-label">Bateria</span><span class="info-val" id="dse-bat">—</span></div>
+            <div class="info-row"><span class="info-label">Alarmes</span><span class="info-val" id="dse-alarmes">—</span></div>
+            <div class="info-row"><span class="info-label">Horas func.</span><span class="info-val" id="dse-horas">—</span></div>
+            <div class="info-row"><span class="info-label">Partidas</span><span class="info-val" id="dse-partidas">—</span></div>
+            <div class="info-row"><span class="info-label">Tempo ligado</span><span class="info-val" id="dse-tempo">—</span></div>
+          </div>
+
+          <!-- Gerador tensões -->
+          <div class="ccard" style="border-color:#22c55e40">
+            <div class="ccard-nome" style="color:#22c55e">⚡ Tensões Gerador</div>
+            <div class="info-row"><span class="info-label">Fase 1 (L1-N)</span><span class="info-val" id="dse-gen-l1">—</span></div>
+            <div class="info-row"><span class="info-label">Fase 2 (L2-N)</span><span class="info-val" id="dse-gen-l2">—</span></div>
+            <div class="info-row"><span class="info-label">Fase 3 (L3-N)</span><span class="info-val" id="dse-gen-l3">—</span></div>
+            <div class="info-row"><span class="info-label">Tensão média</span><span class="info-val" id="dse-gen-media">—</span></div>
+            <div class="info-row"><span class="info-label">Desequilíbrio</span><span class="info-val" id="dse-gen-deseq">—</span></div>
+          </div>
+
+          <!-- ENEL tensões -->
+          <div class="ccard" style="border-color:#a855f740">
+            <div class="ccard-nome" style="color:#a855f7">🏢 Tensões ENEL</div>
+            <div class="info-row"><span class="info-label">Fase 1 (L1-N)</span><span class="info-val" id="dse-rede-l1">—</span></div>
+            <div class="info-row"><span class="info-label">Fase 2 (L2-N)</span><span class="info-val" id="dse-rede-l2">—</span></div>
+            <div class="info-row"><span class="info-label">Fase 3 (L3-N)</span><span class="info-val" id="dse-rede-l3">—</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Config -->
+    <div class="section" id="sec-config">
+      <div id="novos-wrap" style="display:none;margin-bottom:1.5rem">
+        <div style="font-size:.8rem;font-weight:700;color:#fdba74;margin-bottom:.75rem">
+          ⚠️ Dispositivos novos detectados — configure para receber alertas
+        </div>
+        <div class="config-grid" id="novos-grid"></div>
+      </div>
+      <div style="font-size:.8rem;font-weight:600;color:var(--muted);margin-bottom:.75rem;text-transform:uppercase;letter-spacing:.05em">Dispositivos configurados</div>
+      <div class="config-grid" id="config-grid"></div>
+
+      <!-- Lojas / Geofence -->
+      <div style="font-size:.8rem;font-weight:700;color:#34d399;margin:2rem 0 .75rem;text-transform:uppercase;letter-spacing:.05em">📍 Lojas (Geofence)</div>
+      <div style="font-size:.8rem;color:var(--muted);margin-bottom:1rem">Alerta automático quando um dispositivo chega perto de uma loja (raio padrão 150 m).</div>
+      <div class="config-grid" id="lojas-grid"></div>
+      <div class="ccard" style="border-color:#34d39440;margin-top:.75rem">
+        <div class="ccard-nome" style="color:#34d399">➕ Adicionar loja</div>
+        <div class="ccard-label">Nome</div>
+        <input class="ccard-input" id="loja-nome" placeholder="Ex: Loja Principal" />
+        <div class="ccard-label" style="margin-top:.4rem">Endereço completo</div>
+        <input class="ccard-input" id="loja-end" placeholder="Av. A, 910 - Conjunto Ceará I, Fortaleza - CE" />
+        <div class="ccard-label" style="margin-top:.4rem">Raio (metros)</div>
+        <input class="ccard-input" id="loja-raio" type="number" value="150" min="30" max="2000" />
+        <button class="btn-save" style="background:#059669" onclick="adicionarLoja()">🌍 Geocodificar e salvar</button>
+        <div class="msg-ok"  id="loja-ok">✓ Loja adicionada com sucesso</div>
+        <div class="msg-err" id="loja-err">✗ Erro — verifique o endereço</div>
+      </div>
+    </div>
+
+  </div>
+</main>
 
 <script>
+  let _logsAll = [];
+  let _veiculos = [];
+  let _logFiltro = '';
+
+  const PAGE_TITLES = {
+    dashboard: 'Dashboard',
+    veiculos:  'Veículos',
+    logs:      'Eventos',
+    dse:       'Cálculos DSE — Gerador',
+    config:    'Configurações',
+  };
+
+  function navTo(id, btn) {
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+    document.getElementById('sec-' + id).classList.add('active');
+    btn.classList.add('active');
+    document.getElementById('page-title').textContent = PAGE_TITLES[id];
+  }
+
   function badgeInfo(v) {
-    if (v.ignition === null || v.ignition === undefined)
-      return ['b-nd', 'Sem dados'];
-    if (v.ignition === 0)
-      return ['b-off', 'Desligado'];
-    if (v.motion === 1 || (v.speed && v.speed > 2))
-      return ['b-move', 'Em movimento'];
+    if (v.ignition === null || v.ignition === undefined) return ['b-nd', 'Sem dados'];
+    if (v.ignition === 0) return ['b-off', 'Desligado'];
+    if (v.motion === 1 || (v.speed && v.speed > 2)) return ['b-move', 'Em movimento'];
     return ['b-parado', 'Ligado / Parado'];
   }
 
-  function fmt(val, suffix = '') {
-    return val != null ? val + suffix : '—';
+  function fmt(val, suffix = '') { return val != null ? val + suffix : '—'; }
+
+  function makeCard(v, compact = false) {
+    const [cls, label] = badgeInfo(v);
+    const grupoTxt = v.grupo_id ? '📱 WhatsApp ativo' : '🔕 Sem WhatsApp';
+    return `
+      <div class="vcard ${v.ativo ? '' : 'inativo'}">
+        <div class="vcard-top">
+          <div>
+            <div class="vcard-nome">${v.nome}</div>
+            <div class="vcard-grupo">${grupoTxt}</div>
+          </div>
+          <span class="badge ${cls}">${label}</span>
+        </div>
+        <hr class="vcard-divider">
+        <div class="info-row"><span class="info-label">Endereço</span><span class="info-val">${v.address || '—'}</span></div>
+        <div class="info-row"><span class="info-label">Velocidade</span><span class="info-val">${fmt(v.speed, ' km/h')}</span></div>
+        <div class="info-row"><span class="info-label">Hodômetro</span><span class="info-val">${fmt(v.odometer, ' km')}</span></div>
+        <div class="info-row"><span class="info-label">Bateria</span><span class="info-val">${fmt(v.batteryLevel, '%')}</span></div>
+        <div class="info-row"><span class="info-label">Ligou às</span><span class="info-val">${v.hora_ligou || '—'}</span></div>
+        <div class="info-row"><span class="info-label">Último alerta</span><span class="info-val">${v.ultimo_alerta || '—'}</span></div>
+        <div class="vcard-actions">
+          <button class="btn-toggle ${v.ativo ? 'ativo' : ''}" onclick="toggle('${v.nome}')">
+            ${v.ativo ? '⏸ Pausar alertas' : '▶ Ativar alertas'}
+          </button>
+        </div>
+      </div>`;
+  }
+
+  function renderStats(lista) {
+    const total    = lista.length;
+    const ligados  = lista.filter(v => v.ignition === 1).length;
+    const movendo  = lista.filter(v => v.ignition === 1 && (v.motion === 1 || (v.speed && v.speed > 2))).length;
+    const parados  = ligados - movendo;
+    const desl     = lista.filter(v => v.ignition === 0).length;
+    document.getElementById('stats').innerHTML = `
+      <div class="stat-card">
+        <div class="stat-label">Total</div>
+        <div class="stat-value">${total}</div>
+        <div class="stat-sub">dispositivos</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Em movimento</div>
+        <div class="stat-value" style="color:#86efac">${movendo}</div>
+        <div class="stat-sub">veículos</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Ligado / Parado</div>
+        <div class="stat-value" style="color:#fdba74">${parados}</div>
+        <div class="stat-sub">veículos</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Desligados</div>
+        <div class="stat-value" style="color:#fca5a5">${desl}</div>
+        <div class="stat-sub">veículos</div>
+      </div>`;
   }
 
   function renderCards(lista) {
-    document.getElementById('cards').innerHTML = lista.map(v => {
-      const [cls, label] = badgeInfo(v);
-      return `
-        <div class="card ${v.ativo ? '' : 'inativo'}">
-          <div class="card-top">
-            <span class="card-nome">${v.nome}</span>
-            <span class="badge ${cls}">${label}</span>
-          </div>
-          <div class="info-row"><span class="info-label">Endereço</span><span class="info-val">${v.address || '—'}</span></div>
-          <div class="info-row"><span class="info-label">Velocidade</span><span class="info-val">${fmt(v.speed, ' km/h')}</span></div>
-          <div class="info-row"><span class="info-label">Hodômetro</span><span class="info-val">${fmt(v.odometer, ' km')}</span></div>
-          <div class="info-row"><span class="info-label">Bateria</span><span class="info-val">${fmt(v.batteryLevel, '%')}</span></div>
-          <div class="info-row"><span class="info-label">Ligou às</span><span class="info-val">${v.hora_ligou || '—'}</span></div>
-          <div class="info-row"><span class="info-label">Último alerta</span><span class="info-val">${v.ultimo_alerta || '—'}</span></div>
-          <button class="btn-toggle" onclick="toggle('${v.nome}')">
-            ${v.ativo ? '⏸ Pausar alertas' : '▶ Ativar alertas'}
-          </button>
-        </div>`;
-    }).join('');
+    const html = lista.map(v => makeCard(v)).join('');
+    document.getElementById('cards-dash').innerHTML  = html || '<div class="empty">Sem dados</div>';
+    document.getElementById('cards-full').innerHTML  = html || '<div class="empty">Sem dados</div>';
   }
 
-  function renderLogs(logs) {
-    document.getElementById('logs-body').innerHTML = logs.slice(0, 60).map(l => {
-      const ts = l.ts.replace('T', ' ').slice(0, 19);
-      const det = (l.detalhe || '').slice(0, 90);
+  function renderLogs(logs, filtro = '') {
+    const src = filtro ? logs.filter(l => l.tipo === filtro) : logs;
+    document.getElementById('logs-body').innerHTML = src.slice(0, 100).map(l => {
+      const ts  = l.ts.replace('T', ' ').slice(0, 19);
+      const det = (l.detalhe || '').slice(0, 100);
       return `
         <tr>
-          <td>${ts}</td>
-          <td>${l.veiculo}</td>
-          <td class="tipo-${l.tipo}">${l.tipo}</td>
+          <td style="white-space:nowrap;color:var(--muted)">${ts}</td>
+          <td style="font-weight:600">${l.veiculo}</td>
+          <td><span class="tipo-pill tipo-${l.tipo}">${l.tipo.replace('_',' ')}</span></td>
           <td>${det}</td>
         </tr>`;
-    }).join('');
+    }).join('') || '<tr><td colspan="4" class="empty">Nenhum evento</td></tr>';
+  }
+
+  function filtrarLog(tipo, btn) {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    _logFiltro = tipo;
+    renderLogs(_logsAll, tipo);
   }
 
   function renderConfig(lista) {
     document.getElementById('config-grid').innerHTML = lista.map(v => `
-      <div class="config-card">
-        <div class="config-nome">${v.nome}</div>
-        <div class="config-label">ID do grupo WhatsApp</div>
-        <input class="config-input" id="grupo-${v.nome}" value="${v.grupo_id || ''}" placeholder="120363...@g.us" />
-        <button class="btn-salvar" onclick="salvarConfig('${v.nome}')">Salvar grupo</button>
+      <div class="ccard">
+        <div class="ccard-nome">${v.nome}</div>
+        <div class="ccard-label">Grupo WhatsApp (ID)</div>
+        <input class="ccard-input" id="grupo-${v.nome}" value="${v.grupo_id || ''}" placeholder="120363...@g.us" />
+        <button class="btn-save" onclick="salvarConfig('${v.nome}')">Salvar</button>
         <div class="msg-ok"  id="ok-${v.nome}">✓ Salvo com sucesso</div>
         <div class="msg-err" id="err-${v.nome}">✗ Erro ao salvar</div>
       </div>`).join('');
@@ -239,7 +654,7 @@
         body: JSON.stringify({ grupo_id }),
       });
       if (r.ok) { okEl.style.display = 'block'; setTimeout(() => okEl.style.display = 'none', 3000); }
-      else       { errEl.style.display = 'block'; }
+      else { errEl.style.display = 'block'; }
     } catch { errEl.style.display = 'block'; }
   }
 
@@ -248,24 +663,194 @@
     await atualizar();
   }
 
+  async function carregarDesconhecidos() {
+    try {
+      var lista = await fetch("/api/desconhecidos").then(function(r){return r.json();});
+      var wrap = document.getElementById("novos-wrap");
+      if (!lista.length) { wrap.style.display = "none"; return; }
+      wrap.style.display = "block";
+      document.getElementById("novos-grid").innerHTML = lista.map(function(d) {
+        var id = "novo-" + d.traccar_nome.replace(/\s+/g,"_");
+        return "<div class=\"ccard\" style=\"border-color:#fdba7440\">"
+          + "<div class=\"ccard-nome\" style=\"color:#fdba74\">🆕 " + d.traccar_nome + "</div>"
+          + "<div class=\"ccard-label\">Nome de exibição</div>"
+          + "<input class=\"ccard-input\" id=\"" + id + "-nome\" placeholder=\"Ex: VINICIUS S22\" />"
+          + "<div class=\"ccard-label\" style=\"margin-top:.3rem\">Tipo</div>"
+          + "<select class=\"ccard-input\" id=\"" + id + "-tipo\">"
+          + "<option value=\"celular\">Celular</option>"
+          + "<option value=\"veiculo\">Veículo</option>"
+          + "<option value=\"equipamento\">Equipamento</option>"
+          + "</select>"
+          + "<div class=\"ccard-label\" style=\"margin-top:.3rem\">Grupo WhatsApp (ID)</div>"
+          + "<input class=\"ccard-input\" id=\"" + id + "-grupo\" placeholder=\"120363...@g.us\" />"
+          + "<button class=\"btn-save\" onclick=\"adicionarDisp(" + JSON.stringify(d.traccar_nome) + ", '" + id + "')\">Adicionar</button>"
+          + "<div class=\"msg-ok\" id=\"" + id + "-ok\">✓ Adicionado com sucesso</div>"
+          + "<div class=\"msg-err\" id=\"" + id + "-err\">✗ Erro ao adicionar</div>"
+          + "</div>";
+      }).join("");
+    } catch(e) {}
+  }
+
+  async function adicionarDisp(traccar_nome, id) {
+    var nome     = document.getElementById(id + "-nome").value.trim().toUpperCase();
+    var tipo     = document.getElementById(id + "-tipo").value;
+    var grupo_id = document.getElementById(id + "-grupo").value.trim();
+    var okEl  = document.getElementById(id + "-ok");
+    var errEl = document.getElementById(id + "-err");
+    okEl.style.display = errEl.style.display = "none";
+    if (!nome) { errEl.textContent = "✗ Preencha o nome de exibição"; errEl.style.display = "block"; return; }
+    try {
+      var r = await fetch("/api/dispositivo/adicionar", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({traccar_nome: traccar_nome, nome: nome, grupo_id: grupo_id, tipo: tipo})
+      });
+      if (r.ok) {
+        okEl.style.display = "block";
+        setTimeout(function(){ carregarDesconhecidos(); atualizar(); }, 1500);
+      } else { errEl.style.display = "block"; }
+    } catch(e) { errEl.style.display = "block"; }
+  }
+
   async function atualizar() {
     try {
       const [veiculos, logs] = await Promise.all([
         fetch('/api/veiculos').then(r => r.json()),
         fetch('/api/logs').then(r => r.json()),
       ]);
+      _veiculos = veiculos;
+      _logsAll  = logs;
+      renderStats(veiculos);
       renderCards(veiculos);
-      renderLogs(logs);
+      renderLogs(logs, _logFiltro);
       renderConfig(veiculos);
-      document.getElementById('atualizado').textContent =
-        'Atualizado: ' + new Date().toLocaleTimeString('pt-BR');
-    } catch (e) {
-      document.getElementById('atualizado').textContent = 'Erro ao conectar';
+      document.getElementById('atualizado').innerHTML =
+        '<span class="dot-live"></span>Atualizado ' + new Date().toLocaleTimeString('pt-BR');
+    } catch {
+      document.getElementById('atualizado').innerHTML = '<span style="color:#fca5a5">● Sem conexão</span>';
+    }
+  }
+
+  async function carregarLojas() {
+    try {
+      var lojas = await fetch("/api/lojas").then(function(r){return r.json();});
+      var grid = document.getElementById("lojas-grid");
+      if (!lojas.length) { grid.innerHTML = '<div style="color:var(--muted);font-size:.85rem">Nenhuma loja configurada.</div>'; return; }
+      grid.innerHTML = lojas.map(function(l) {
+        return "<div class=\"ccard\" style=\"border-color:#34d39440\">"
+          + "<div class=\"ccard-nome\" style=\"color:#34d399\">📍 " + l.nome + "</div>"
+          + "<div class=\"ccard-label\">" + l.endereco + "</div>"
+          + "<div style=\"font-size:.75rem;color:var(--muted);margin:.3rem 0\">Coords: " + l.lat.toFixed(6) + ", " + l.lon.toFixed(6) + " · Raio: " + l.raio + " m</div>"
+          + "<button class=\"btn-save\" style=\"background:#dc2626;width:auto;padding:.3rem .8rem\" onclick=\"removerLoja('" + l.id + "')\">🗑 Remover</button>"
+          + "</div>";
+      }).join("");
+    } catch(e) {}
+  }
+
+  async function adicionarLoja() {
+    var nome    = document.getElementById("loja-nome").value.trim();
+    var end     = document.getElementById("loja-end").value.trim();
+    var raio    = parseInt(document.getElementById("loja-raio").value) || 150;
+    var okEl    = document.getElementById("loja-ok");
+    var errEl   = document.getElementById("loja-err");
+    okEl.style.display = errEl.style.display = "none";
+    if (!nome || !end) { errEl.textContent = "✗ Preencha nome e endereço"; errEl.style.display = "block"; return; }
+    try {
+      var r = await fetch("/api/lojas", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({nome: nome, endereco: end, raio: raio})
+      });
+      if (r.ok) {
+        okEl.style.display = "block";
+        document.getElementById("loja-nome").value = "";
+        document.getElementById("loja-end").value  = "";
+        setTimeout(function(){ okEl.style.display = "none"; carregarLojas(); }, 2000);
+      } else {
+        var data = await r.json();
+        errEl.textContent = "✗ " + (data.error || "Erro ao geocodificar");
+        errEl.style.display = "block";
+      }
+    } catch(e) { errEl.style.display = "block"; }
+  }
+
+  async function removerLoja(id) {
+    if (!confirm("Remover esta loja?")) return;
+    await fetch("/api/lojas/" + id, {method: "DELETE"});
+    carregarLojas();
+  }
+
+  function fv(v, suf) { return (v !== undefined && v !== null && v !== 0) ? v + (suf||'') : '—'; }
+
+  async function atualizarDSE() {
+    try {
+      var d = await fetch('/api/dse').then(function(r){return r.json();});
+      if (!d.disponivel) { document.getElementById('dse-offline').style.display='block'; document.getElementById('dse-content').style.display='none'; return; }
+      document.getElementById('dse-offline').style.display='none';
+      document.getElementById('dse-content').style.display='block';
+
+      var badge = document.getElementById('dse-badge');
+      if (d.ligado) {
+        badge.textContent = '🔴 GERADOR LIGADO';
+        badge.style.background = '#7f1d1d';
+        badge.style.borderColor = '#ef4444';
+        badge.style.color = '#fca5a5';
+      } else {
+        badge.textContent = '✅ GERADOR DESLIGADO';
+        badge.style.background = '#14532d';
+        badge.style.borderColor = '#22c55e';
+        badge.style.color = '#86efac';
+      }
+
+      document.getElementById('dse-atualizado').textContent = new Date().toLocaleTimeString('pt-BR');
+
+      // Combustível
+      var fuelColor = d.fuel_pct <= 20 ? '#ef4444' : d.fuel_pct <= 30 ? '#f97316' : '#22c55e';
+      document.getElementById('dse-fuel-pct').innerHTML = '<span style="color:'+fuelColor+';font-weight:700">'+d.fuel_pct.toFixed(1)+'%</span>';
+      document.getElementById('dse-fuel-l').textContent = d.fuel_litros + ' L';
+      document.getElementById('dse-taxa').textContent = d.taxa_lph ? d.taxa_lph + ' L/h' : '—';
+      document.getElementById('dse-autonomia').textContent = d.autonomia || '—';
+      document.getElementById('dse-previsao').textContent = d.previsao_zero || '—';
+      document.getElementById('dse-consumo-sessao').textContent = d.consumo_sessao_litros ? d.consumo_sessao_litros.toFixed(1) + ' L' : '—';
+
+      // Motor
+      var rpmColor = d.rpm > 0 && (d.rpm < 1700 || d.rpm > 1900) ? '#ef4444' : 'inherit';
+      document.getElementById('dse-rpm').innerHTML = '<span style="color:'+rpmColor+'">'+(d.rpm ? d.rpm.toFixed(0) + ' RPM' : '0')+'</span>';
+      document.getElementById('dse-freq-gen').textContent  = fv(d.freq_gen, ' Hz');
+      document.getElementById('dse-freq-rede').textContent = fv(d.freq_rede, ' Hz');
+      document.getElementById('dse-bat').textContent       = d.bateria ? d.bateria.toFixed(1) + ' V' : '—';
+      document.getElementById('dse-alarmes').innerHTML     = d.alarmes > 0 ? '<span style="color:#ef4444;font-weight:700">'+d.alarmes+' ativo(s)</span>' : '0';
+      document.getElementById('dse-horas').textContent     = d.horas || '—';
+      document.getElementById('dse-partidas').textContent  = fv(d.partidas);
+      document.getElementById('dse-tempo').textContent     = d.tempo_ligado || '—';
+
+      // Tensões gerador
+      function vv(v) { if (!v || v < 10) return '<span style="color:var(--muted)">0 V</span>'; var c = v < 200 ? '#ef4444' : v > 240 ? '#f97316' : '#22c55e'; return '<span style="color:'+c+'">'+v.toFixed(1)+' V</span>'; }
+      document.getElementById('dse-gen-l1').innerHTML  = vv(d.gen_l1);
+      document.getElementById('dse-gen-l2').innerHTML  = vv(d.gen_l2);
+      document.getElementById('dse-gen-l3').innerHTML  = vv(d.gen_l3);
+      document.getElementById('dse-gen-media').innerHTML = d.gen_media ? '<span style="color:#22c55e">'+d.gen_media+' V</span>' : '—';
+      var deseqColor = d.gen_deseq > 3 ? '#ef4444' : d.gen_deseq > 1.5 ? '#f97316' : '#22c55e';
+      document.getElementById('dse-gen-deseq').innerHTML = d.gen_deseq ? '<span style="color:'+deseqColor+'">'+d.gen_deseq+'%</span>' : '—';
+
+      // Tensões ENEL
+      function rv(v) { if (!v || v < 10) return '<span style="color:#ef4444;font-weight:700">❌ 0 V</span>'; return '<span style="color:#22c55e">✅ '+v.toFixed(1)+' V</span>'; }
+      document.getElementById('dse-rede-l1').innerHTML = rv(d.rede_l1);
+      document.getElementById('dse-rede-l2').innerHTML = rv(d.rede_l2);
+      document.getElementById('dse-rede-l3').innerHTML = rv(d.rede_l3);
+    } catch(e) {
+      document.getElementById('dse-offline').style.display='block';
+      document.getElementById('dse-content').style.display='none';
     }
   }
 
   atualizar();
+  carregarDesconhecidos();
+  carregarLojas();
+  atualizarDSE();
   setInterval(atualizar, 5000);
+  setInterval(carregarDesconhecidos, 15000);
+  setInterval(atualizarDSE, 30000);
 </script>
 </body>
 </html>

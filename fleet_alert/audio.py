@@ -18,7 +18,7 @@ def gerar_audio_base64(texto: str) -> str | None:
         return None
 
     try:
-        tts = gTTS(text=texto, lang="pt-br", slow=False)
+        tts = gTTS(text=texto, lang="pt", slow=False)
         mp3_buf = io.BytesIO()
         tts.write_to_fp(mp3_buf)
         mp3_buf.seek(0)

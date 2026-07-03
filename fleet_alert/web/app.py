@@ -4,6 +4,9 @@ from flask import Flask, jsonify, request, render_template, session, redirect, u
 from fleet_alert import state, config
 from fleet_alert.db import ultimos, ultimas_posicoes
 from fleet_alert import config_manager
+from fleet_alert import collector
+from fleet_alert import geofence
+from fleet_alert import gerador
 
 _TEMPLATES = os.path.join(os.path.dirname(__file__), "templates")
 
@@ -101,5 +104,55 @@ def criar_app() -> Flask:
         ativo = config.VEICULOS.get(nome, {}).get("ativo", True)
         config_manager.salvar(nome, grupo_id, ativo)
         return jsonify({"nome": nome, "grupo_id": grupo_id, "ativo": ativo})
+
+    @app.route("/api/desconhecidos")
+    @_login_required
+    def api_desconhecidos():
+        return jsonify(collector.get_desconhecidos())
+
+    @app.route("/api/dispositivo/adicionar", methods=["POST"])
+    @_login_required
+    def api_adicionar_dispositivo():
+        body         = request.get_json(silent=True) or {}
+        traccar_nome = body.get("traccar_nome", "").strip()
+        nome         = body.get("nome", "").strip().upper()
+        grupo_id     = body.get("grupo_id", "").strip()
+        tipo         = body.get("tipo", "celular").strip()
+        if not traccar_nome or not nome:
+            return jsonify({"error": "traccar_nome e nome obrigatórios"}), 400
+        config_manager.adicionar_dispositivo(nome, traccar_nome, grupo_id, tipo)
+        # Remove da lista de desconhecidos
+        collector._desconhecidos.pop(traccar_nome, None)
+        return jsonify({"ok": True, "nome": nome})
+
+    @app.route("/api/dse")
+    @_login_required
+    def api_dse():
+        return jsonify(gerador.get_estado_painel())
+
+    @app.route("/api/lojas")
+    @_login_required
+    def api_lojas():
+        return jsonify(geofence.carregar())
+
+    @app.route("/api/lojas", methods=["POST"])
+    @_login_required
+    def api_adicionar_loja():
+        body      = request.get_json(silent=True) or {}
+        nome_loja = body.get("nome", "").strip()
+        endereco  = body.get("endereco", "").strip()
+        raio      = int(body.get("raio", 150))
+        if not nome_loja or not endereco:
+            return jsonify({"error": "nome e endereco obrigatórios"}), 400
+        loja = geofence.adicionar(nome_loja, endereco, raio)
+        if not loja:
+            return jsonify({"error": "Não foi possível geocodificar o endereço"}), 422
+        return jsonify(loja), 201
+
+    @app.route("/api/lojas/<loja_id>", methods=["DELETE"])
+    @_login_required
+    def api_remover_loja(loja_id: str):
+        geofence.remover(loja_id)
+        return jsonify({"ok": True})
 
     return app
