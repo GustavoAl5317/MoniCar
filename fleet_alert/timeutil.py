@@ -37,3 +37,22 @@ def parse_traccar(ts: str | None) -> datetime | None:
 def hora_alerta() -> str:
     """Horario exibido nos alertas WhatsApp — sempre Brasilia, momento do envio."""
     return agora_data_hora()
+
+
+def parse_iso_br(iso: str | None) -> datetime | None:
+    """Interpreta ISO salvo no estado como horario de Brasilia."""
+    if not iso:
+        return None
+    try:
+        dt = datetime.fromisoformat(iso)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=TZ_BR)
+        return dt.astimezone(TZ_BR)
+    except Exception:
+        return None
+
+
+def fmt_iso_br(iso: str | None) -> str:
+    """Formata ISO do estado para exibicao em Brasilia."""
+    dt = parse_iso_br(iso)
+    return dt.strftime(FMT_DATA_HORA) if dt else "N/D"

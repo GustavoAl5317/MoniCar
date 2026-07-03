@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime
 from fleet_alert import state, config
-from fleet_alert.timeutil import agora, agora_iso, agora_data_hora, TZ_BR
+from fleet_alert.timeutil import agora_iso, agora_data_hora, fmt_iso_br, parse_iso_br, TZ_BR
 
 log = logging.getLogger(__name__)
 
@@ -19,17 +19,30 @@ def _segundos_desde_ultimo_alerta(est: dict) -> float:
     if not ts:
         return float("inf")
     try:
-        return (datetime.now(TZ_BR) - datetime.fromisoformat(ts)).total_seconds()
+        dt = parse_iso_br(ts)
+        if not dt:
+            return float("inf")
+        return (datetime.now(TZ_BR) - dt).total_seconds()
     except Exception:
         return float("inf")
 
 
-def _tempo_ligado(hora_iso: str | None) -> str:
+def _ligou_as(est: dict, fallback: str) -> str:
+    """Hora em que o veiculo ligou — sempre derivada do ISO salvo."""
+    return fmt_iso_br(est.get("hora_ligou_iso")) if est.get("hora_ligou_iso") else fallback
+
+
+def _tempo_ligado(hora_iso: str | None, ate_iso: str | None = None) -> str:
     if not hora_iso:
         return "N/D"
     try:
-        delta   = datetime.now(TZ_BR) - datetime.fromisoformat(hora_iso)
-        minutos = int(delta.total_seconds() // 60)
+        inicio = parse_iso_br(hora_iso)
+        fim    = parse_iso_br(ate_iso) if ate_iso else datetime.now(TZ_BR)
+        if not inicio or not fim:
+            return "N/D"
+        minutos = int((fim - inicio).total_seconds() // 60)
+        if minutos < 0:
+            return "N/D"
         if minutos >= 60:
             return f"{minutos // 60}h {minutos % 60}min"
         return f"{minutos} minutos"
@@ -74,8 +87,10 @@ def processar(nome: str, dados: dict) -> dict | None:
 
     # ── Veículo desligou ─────────────────────────────────────────
     if ig_ant == 1 and ig_atual == 0:
+        iso_desligou  = agora_iso()
         hora_desligou = hora_agora
-        tempo_str     = _tempo_ligado(est.get("hora_ligou_iso"))
+        tempo_str     = _tempo_ligado(est.get("hora_ligou_iso"), iso_desligou)
+        ligou_as      = _ligou_as(est, "N/D")
 
         state.atualizar(nome, {
             "ignition":      0,
@@ -89,14 +104,17 @@ def processar(nome: str, dados: dict) -> dict | None:
             "tipo":  DESLIGADO,
             "texto": (
                 f"🔴 Veículo *{nome}* foi desligado.\n\n"
+                f"Horário: {hora_desligou}.\n"
                 f"Desligado às: {hora_desligou}.\n"
+                f"Ligado às: {ligou_as}.\n"
                 f"Tempo ligado: {tempo_str}.\n"
                 f"Localização: {endereco}.\n"
                 f"KM final: {km_str}.\n"
                 f"Bateria: {bat_str}."
             ),
             "audio": (
-                f"Alerta da frota. O veículo {nome} foi desligado às {hora_desligou}. "
+                f"Alerta da frota. O veículo {nome} foi desligado. "
+                f"Horário: {hora_desligou}. "
                 f"Tempo ligado: {tempo_str}. "
                 f"Localização: {endereco}. "
                 f"Bateria em {bat_str}."
@@ -105,11 +123,12 @@ def processar(nome: str, dados: dict) -> dict | None:
 
     # ── Veículo ligou (estava desligado ou sem dados) ─────────────
     elif ig_ant != 1 and ig_atual == 1:
+        iso_ligou  = agora_iso()
         hora_ligou = hora_agora
         state.atualizar(nome, {
             "ignition":       1,
             "hora_ligou":     hora_ligou,
-            "hora_ligou_iso": agora_iso(),
+            "hora_ligou_iso": iso_ligou,
             "ultimo_alerta":  None,
         })
 
@@ -124,7 +143,7 @@ def processar(nome: str, dados: dict) -> dict | None:
           and (motion == 1 or speed > config.SPEED_MOVING_KMPH)):
         seg = _segundos_desde_ultimo_alerta(est)
         if seg >= _COOLDOWN_MOVIMENTO:
-            hora_ligou = est.get("hora_ligou", hora_agora)
+            hora_ligou = _ligou_as(est, hora_agora)
             resultado  = _alerta_movimento(nome, hora_ligou, speed, endereco, km_str, bat_str, hora_agora)
         else:
             log.debug("[%s] EM_MOVIMENTO suprimido — cooldown (%ds restantes)", nome, int(_COOLDOWN_MOVIMENTO - seg))
@@ -136,7 +155,7 @@ def processar(nome: str, dados: dict) -> dict | None:
           and speed <= config.SPEED_STOPPED_KMPH):
         seg = _segundos_desde_ultimo_alerta(est)
         if seg >= _COOLDOWN_MOVIMENTO:
-            hora_ligou = est.get("hora_ligou", hora_agora)
+            hora_ligou = _ligou_as(est, hora_agora)
             resultado  = _alerta_ligado_parado(nome, hora_ligou, endereco, km_str, bat_str, hora_agora)
         else:
             log.debug("[%s] LIGADO_PARADO suprimido — cooldown (%ds restantes)", nome, int(_COOLDOWN_MOVIMENTO - seg))
