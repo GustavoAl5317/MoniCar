@@ -75,6 +75,27 @@ def status_operacional(ignition, speed: float, motion: int) -> str:
     return "Desconhecido"
 
 
+def _ignicao_efetiva(raw: bool | None, motion: int, speed: float, ig_ant) -> int:
+    """Interpreta ignição do GPS; infere pelo movimento se ausente."""
+    if raw is True:
+        return 1
+    if raw is False:
+        return 0
+    if motion == 1 or speed > config.SPEED_MOVING_KMPH:
+        return 1
+    if ig_ant == 1:
+        return 1
+    return 0
+
+
+def _em_movimento(motion: int, speed: float) -> bool:
+    return motion == 1 or speed > config.SPEED_MOVING_KMPH
+
+
+def _parado(motion: int, speed: float) -> bool:
+    return motion == 0 and speed <= config.SPEED_STOPPED_KMPH
+
+
 def derivar_ultimo_alerta(ignition: int, motion: int, speed: float) -> str:
     """Estado operacional atual do veículo (sem considerar histórico antigo)."""
     if ignition != 1:
@@ -141,12 +162,14 @@ def processar(nome: str, dados: dict) -> dict | None:
     """
     est = state.get(nome)
 
-    ig_ant    = est.get("ignition")        # ignição anterior
+    ig_ant     = est.get("ignition")
     alerta_ant = est.get("ultimo_alerta")
-
-    ig_atual   = dados.get("ignition", 0)
-    motion     = dados.get("motion",   0)
-    speed      = dados.get("speed",    0)
+    raw_ig     = dados.get("ignition_raw")
+    motion     = dados.get("motion", 0)
+    speed      = dados.get("speed", 0)
+    ig_atual   = _ignicao_efetiva(raw_ig, motion, speed, ig_ant)
+    em_mov     = _em_movimento(motion, speed)
+    parado     = _parado(motion, speed)
     endereco   = dados.get("address")  or "Endereço não disponível"
     bateria    = dados.get("batteryLevel") or dados.get("battery")
     odometro   = dados.get("odometer")
@@ -157,8 +180,8 @@ def processar(nome: str, dados: dict) -> dict | None:
 
     resultado = None
 
-    # ── Veículo desligou ─────────────────────────────────────────
-    if ig_ant == 1 and ig_atual == 0:
+    # ── Veículo desligou (só com ignição explicitamente False) ────
+    if ig_ant == 1 and raw_ig is False:
         iso_desligou  = agora_iso()
         hora_desligou = hora_agora
         tempo_str     = _tempo_ligado(est.get("hora_ligou_iso"), iso_desligou)
@@ -193,7 +216,7 @@ def processar(nome: str, dados: dict) -> dict | None:
             ),
         }
 
-    # ── Veículo ligou (estava desligado ou sem dados) ─────────────
+    # ── Veículo ligou ou começou a se deslocar ────────────────────
     elif ig_ant != 1 and ig_atual == 1:
         iso_ligou  = agora_iso()
         hora_ligou = hora_agora
@@ -204,15 +227,13 @@ def processar(nome: str, dados: dict) -> dict | None:
             "ultimo_alerta":  None,
         })
 
-        if motion == 1 or speed > config.SPEED_MOVING_KMPH:
+        if em_mov:
             resultado = _alerta_movimento(nome, hora_ligou, speed, endereco, km_str, bat_str, hora_agora)
         else:
             resultado = _alerta_ligado_parado(nome, hora_ligou, endereco, km_str, bat_str, hora_agora)
 
     # ── Estava parado, começou a andar ───────────────────────────
-    elif (ig_atual == 1
-          and alerta_ant != EM_MOVIMENTO
-          and (motion == 1 or speed > config.SPEED_MOVING_KMPH)):
+    elif ig_atual == 1 and alerta_ant != EM_MOVIMENTO and em_mov:
         seg = _segundos_desde_ultimo_alerta(est)
         if seg >= _COOLDOWN_MOVIMENTO:
             hora_ligou = _ligou_as(est, hora_agora)
@@ -221,10 +242,7 @@ def processar(nome: str, dados: dict) -> dict | None:
             log.debug("[%s] EM_MOVIMENTO suprimido — cooldown (%ds restantes)", nome, int(_COOLDOWN_MOVIMENTO - seg))
 
     # ── Estava andando, parou ────────────────────────────────────
-    elif (ig_atual == 1
-          and alerta_ant == EM_MOVIMENTO
-          and motion == 0
-          and speed <= config.SPEED_STOPPED_KMPH):
+    elif ig_atual == 1 and alerta_ant == EM_MOVIMENTO and parado:
         seg = _segundos_desde_ultimo_alerta(est)
         if seg >= _COOLDOWN_MOVIMENTO:
             hora_ligou = _ligou_as(est, hora_agora)

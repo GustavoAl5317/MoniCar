@@ -65,21 +65,22 @@ def _carregar_dispositivos():
 
 def _inicializar_estado_veiculo(nome: str, pos: dict):
     """Sincroniza estado sem disparar alertas de transição."""
-    attrs = pos.get("attributes", {})
-    lat   = pos.get("latitude")
-    lon   = pos.get("longitude")
+    attrs  = pos.get("attributes", {})
+    lat    = pos.get("latitude")
+    lon    = pos.get("longitude")
+    raw_ig = attrs.get("ignition")
+    motion = 1 if attrs.get("motion") else 0
+    speed  = round(pos.get("speed", 0), 2)
+    ig_ant = state.get(nome.upper()).get("ignition")
+    ig_ef  = rules._ignicao_efetiva(raw_ig, motion, speed, ig_ant)
     dados = {
-        "ignition":     1 if attrs.get("ignition") else 0,
-        "motion":       1 if attrs.get("motion")   else 0,
-        "speed":        round(pos.get("speed", 0), 2),
+        "ignition":     ig_ef,
+        "motion":       motion,
+        "speed":        speed,
         "address":      pos.get("address", ""),
         "odometer":     round(attrs.get("odometer", 0) / 1000, 2) if attrs.get("odometer") else None,
         "batteryLevel": attrs.get("batteryLevel"),
-        "ultimo_alerta": rules.derivar_ultimo_alerta(
-            1 if attrs.get("ignition") else 0,
-            1 if attrs.get("motion") else 0,
-            round(pos.get("speed", 0), 2),
-        ),
+        "ultimo_alerta": rules.derivar_ultimo_alerta(ig_ef, motion, speed),
         "ultimo_alerta_ts": None,
     }
     if lat and lon:
@@ -151,13 +152,18 @@ def _processar_posicao(pos: dict):
         return
 
     attrs = pos.get("attributes", {})
+    raw_ig = attrs.get("ignition")
+    motion_i = 1 if attrs.get("motion") else 0
+    speed_f  = round(pos.get("speed", 0), 2)
+    est_ig   = state.get(nome.upper()).get("ignition") if nome else None
     dados = {
         "latitude":     pos.get("latitude"),
         "longitude":    pos.get("longitude"),
-        "speed":        round(pos.get("speed", 0), 2),
+        "speed":        speed_f,
         "address":      pos.get("address", ""),
-        "ignition":     1 if attrs.get("ignition") else 0,
-        "motion":       1 if attrs.get("motion")   else 0,
+        "ignition_raw": raw_ig,
+        "ignition":     rules._ignicao_efetiva(raw_ig, motion_i, speed_f, est_ig),
+        "motion":       motion_i,
         "batteryLevel": attrs.get("batteryLevel"),
         "battery":      attrs.get("battery"),
         "odometer":     round(attrs.get("odometer", 0) / 1000, 2) if attrs.get("odometer") else None,
