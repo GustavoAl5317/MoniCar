@@ -75,6 +75,12 @@ def _inicializar_estado_veiculo(nome: str, pos: dict):
         "address":      pos.get("address", ""),
         "odometer":     round(attrs.get("odometer", 0) / 1000, 2) if attrs.get("odometer") else None,
         "batteryLevel": attrs.get("batteryLevel"),
+        "ultimo_alerta": rules.derivar_ultimo_alerta(
+            1 if attrs.get("ignition") else 0,
+            1 if attrs.get("motion") else 0,
+            round(pos.get("speed", 0), 2),
+        ),
+        "ultimo_alerta_ts": None,
     }
     if lat and lon:
         dados["latitude"]  = lat
@@ -176,17 +182,32 @@ def _processar_posicao(pos: dict):
     lon = dados.get("longitude")
     if lat and lon:
         est_atual = state.get(nome.upper())
-        chegou    = geofence.verificar(nome.upper(), lat, lon, est_atual)
-        if chegou:
+        geo_evt   = geofence.verificar(nome.upper(), lat, lon, est_atual)
+        if geo_evt:
             hora      = hora_alerta()
-            loja_nome = chegou["loja_nome"]
+            loja_nome = geo_evt["loja_nome"]
             endereco  = dados.get("address") or "N/D"
-            texto_loja = (
-                f"📍 *{nome}* chegou na loja *{loja_nome}*.\n\n"
-                f"Horário: {hora}.\n"
-                f"Localização: {endereco}."
-            )
-            registrar(nome, geofence.CHEGOU_LOJA, texto_loja[:200])
+            if geo_evt["tipo"] == geofence.SAIU_LOJA:
+                texto_loja = (
+                    f"🚗 *{nome}* saiu da loja *{loja_nome}*.\n\n"
+                    f"Horário: {hora}.\n"
+                    f"Localização: {endereco}."
+                )
+                audio_loja = (
+                    f"Alerta da frota. {nome} saiu da loja {loja_nome}. "
+                    f"Horário: {hora}. Localização: {endereco}."
+                )
+            else:
+                texto_loja = (
+                    f"📍 *{nome}* chegou na loja *{loja_nome}*.\n\n"
+                    f"Horário: {hora}.\n"
+                    f"Localização: {endereco}."
+                )
+                audio_loja = (
+                    f"Alerta da frota. {nome} chegou na loja {loja_nome}. "
+                    f"Horário: {hora}. Localização: {endereco}."
+                )
+            registrar(nome, geo_evt["tipo"], texto_loja[:200])
             # Geofence WhatsApp: somente carros
             if cfg_veiculo.get("tipo") == "veiculo":
                 audio_loja = (

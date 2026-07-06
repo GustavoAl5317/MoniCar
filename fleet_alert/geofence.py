@@ -8,6 +8,7 @@ from fleet_alert import config
 log = logging.getLogger(__name__)
 
 CHEGOU_LOJA = "CHEGOU_LOJA"
+SAIU_LOJA   = "SAIU_LOJA"
 _RAIO_PADRAO = 150  # metros
 
 
@@ -80,16 +81,25 @@ def remover(loja_id: str):
 
 
 def verificar(nome: str, lat: float, lon: float, est: dict) -> dict | None:
-    """Retorna alerta se o dispositivo acabou de entrar em alguma loja."""
+    """Retorna alerta se o dispositivo entrou ou saiu de alguma loja."""
     if not lat or not lon:
         return None
-    # Sem histórico = primeiro contato após restart — só registra, não alerta
     tem_historico = any(k.startswith("loja_") for k in est)
     for loja in carregar():
         dist = _haversine(lat, lon, loja["lat"], loja["lon"])
         dentro = dist <= loja.get("raio", _RAIO_PADRAO)
         chave  = f"loja_{loja['id']}"
         estava = est.get(chave, False)
+
+        if estava and not dentro and tem_historico:
+            log.info("📍 [%s] Saiu da loja '%s' (%.0fm)", nome, loja["nome"], dist)
+            return {
+                "tipo":      SAIU_LOJA,
+                "loja_nome": loja["nome"],
+                "loja_id":   loja["id"],
+                "dist":      round(dist),
+            }
+
         if dentro and not estava:
             if not tem_historico:
                 log.debug(

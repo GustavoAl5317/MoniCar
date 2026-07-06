@@ -75,6 +75,15 @@ def status_operacional(ignition, speed: float, motion: int) -> str:
     return "Desconhecido"
 
 
+def derivar_ultimo_alerta(ignition: int, motion: int, speed: float) -> str:
+    """Estado operacional atual do veículo (sem considerar histórico antigo)."""
+    if ignition != 1:
+        return DESLIGADO
+    if motion == 1 or speed > config.SPEED_MOVING_KMPH:
+        return EM_MOVIMENTO
+    return LIGADO_PARADO
+
+
 def montar_alerta_inicio(nome: str, pos: dict, device: dict) -> dict:
     """Monta alerta de status ao reiniciar o servidor."""
     hora        = agora_data_hora()
@@ -232,6 +241,13 @@ def processar(nome: str, dados: dict) -> dict | None:
         "odometer":     odometro,
         "batteryLevel": bateria,
     })
+
+    # Corrige estado antigo dessincronizado (ex: após restart)
+    if not resultado:
+        derivado = derivar_ultimo_alerta(ig_atual, motion, speed)
+        if derivado != alerta_ant:
+            log.info("[%s] Estado sincronizado: %s → %s", nome, alerta_ant, derivado)
+            state.atualizar(nome, {"ultimo_alerta": derivado})
 
     if resultado:
         state.atualizar(nome, {
